@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    display: flex;
+    overflow: hidden;
+    color: white;
+  }
+  .left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 60px 80px 100px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(13, 153, 255, 0.15);
+    border: 1px solid rgba(13, 153, 255, 0.3);
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 16px;
+    color: #5cb8ff;
+    font-weight: 500;
+    margin-bottom: 32px;
+    width: fit-content;
+  }
+  .badge::before { content: ""; }
+  h1 {
+    font-size: 72px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 24px;
+    letter-spacing: -2px;
+  }
+  h1 span { color: #0d99ff; }
+  .subtitle {
+    font-size: 26px;
+    color: #8899aa;
+    line-height: 1.5;
+    max-width: 600px;
+    margin-bottom: 48px;
+  }
+  .stats {
+    display: flex;
+    gap: 48px;
+  }
+  .stat-item {
+    text-align: left;
+  }
+  .stat-number {
+    font-size: 42px;
+    font-weight: 700;
+    color: #0d99ff;
+    line-height: 1;
+  }
+  .stat-label {
+    font-size: 15px;
+    color: #667788;
+    margin-top: 6px;
+  }
+  .right {
+    width: 700px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+  }
+  .plugin-ui {
+    background: #2c2c2c;
+    border-radius: 16px;
+    padding: 32px;
+    width: 380px;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .plugin-header {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .complete-badge {
+    background: #1a3a1a;
+    color: #4ade80;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .result-section {
+    margin-bottom: 16px;
+  }
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+    color: #aaa;
+  }
+  .result-value {
+    font-weight: 600;
+    color: #4ade80;
+    font-variant-numeric: tabular-nums;
+  }
+  .result-value.blue { color: #0d99ff; }
+  .arrow-flow {
+    position: absolute;
+    right: 720px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .flow-label {
+    writing-mode: vertical-lr;
+    font-size: 13px;
+    color: #445566;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="badge">Figma Plugin</div>
+    <h1>Token<br><span>Rebinder</span></h1>
+    <div class="subtitle">Restore every design system variable binding after code-to-canvas pushes. One click.</div>
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-number">50/51</div>
+        <div class="stat-label">Binding types</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">4,354</div>
+        <div class="stat-label">Bindings per run</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">~30s</div>
+        <div class="stat-label">Processing time</div>
+      </div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="plugin-ui">
+      <div class="plugin-header">Token Rebinder</div>
+      <div class="complete-badge">Complete!</div>
+      <div class="result-section">
+        <div class="section-label">Colors</div>
+        <div class="result-row"><span>Fills</span><span class="result-value">231</span></div>
+        <div class="result-row"><span>Strokes</span><span class="result-value">50</span></div>
+      </div>
+      <div class="result-section">
+        <div class="section-label">Layout</div>
+        <div class="result-row"><span>Spacing</span><span class="result-value">2,510</span></div>
+        <div class="result-row"><span>Border radius</span><span class="result-value">0</span></div>
+        <div class="result-row"><span>Dimensions</span><span class="result-value">8</span></div>
+      </div>
+      <div class="result-section">
+        <div class="section-label">Typography</div>
+        <div class="result-row"><span>Text styles</span><span class="result-value">166</span></div>
+        <div class="result-row"><span>Typography vars</span><span class="result-value">14</span></div>
+        <div class="result-row"><span>Fonts fixed</span><span class="result-value">31</span></div>
+      </div>
+      <div class="result-section">
+        <div class="section-label">Misc</div>
+        <div class="result-row"><span>Stroke weight</span><span class="result-value">650</span></div>
+        <div class="result-row"><span>Opacity</span><span class="result-value">658</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
