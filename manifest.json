@@ -1,0 +1,22 @@
+{
+  "name": "Token Rebinder",
+  "id": "com.hidleeverform.token-rebinder",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  },
+  "permissions": [],
+  "documentationUrl": "https://github.com/hidle-everform/token-rebinder",
+  "relaunchButtons": [
+    {
+      "command": "rebind",
+      "name": "Rebind Tokens",
+      "multipleSelection": true
+    }
+  ]
+}

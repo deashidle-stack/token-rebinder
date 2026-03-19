@@ -1,0 +1,32 @@
+{
+  "name": "token-rebinder",
+  "version": "1.0.0",
+  "description": "Figma plugin that restores design system variable bindings after code-to-canvas pushes. Learns from existing designs, supports 50+ binding types.",
+  "main": "code.js",
+  "scripts": {
+    "build": "npx tsc",
+    "watch": "npx tsc --watch"
+  },
+  "keywords": [
+    "figma",
+    "figma-plugin",
+    "design-tokens",
+    "variables",
+    "design-system",
+    "code-to-canvas",
+    "token-rebinding"
+  ],
+  "author": "Hidle Everform",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hidle-everform/token-rebinder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hidle-everform/token-rebinder/issues"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.123.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, -apple-system, sans-serif; font-size: 12px; color: var(--figma-color-text); padding: 16px; }
+    h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+    button {
+      width: 100%; padding: 10px; border: none; border-radius: 6px; cursor: pointer;
+      font-size: 13px; font-weight: 600; margin-bottom: 12px;
+      background: var(--figma-color-bg-brand, #0d99ff); color: #fff;
+    }
+    button:hover { opacity: 0.9; }
+    .section { margin-top: 12px; }
+    .section-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; color: var(--figma-color-text-secondary, #999); }
+    .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
+    .stat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stat-value.success { color: #198038; }
+    .stat-value.info { color: #0d99ff; }
+    .stat-value.warning { color: #d97706; }
+    .progress {
+      padding: 8px; border-radius: 4px; margin-bottom: 8px;
+      background: var(--figma-color-bg-secondary, #f0f0f0);
+      font-size: 11px; color: #555; white-space: pre-wrap; max-height: 200px; overflow-y: auto;
+    }
+    .progress.done { background: #edf7ed; color: #198038; }
+    .progress.error { background: #fef2f0; color: #c23008; }
+    .options { margin-bottom: 16px; }
+    .option-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+    .option-row label { cursor: pointer; user-select: none; }
+    .option-row input[type="checkbox"] { cursor: pointer; }
+    .unmapped-list { margin-top: 8px; max-height: 100px; overflow-y: auto; font-size: 11px; }
+    .unmapped-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+    .unmapped-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+    .unmapped-hex { font-family: monospace; font-size: 10px; }
+    .unmapped-count { margin-left: auto; color: #999; font-size: 10px; }
+    .group-header { font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; margin-bottom: 2px; color: var(--figma-color-text-tertiary, #bbb); }
+  </style>
+</head>
+<body>
+  <h2>Token Rebinder</h2>
+
+  <div class="options">
+    <div class="option-row"><input type="checkbox" id="opt-colors" checked /><label for="opt-colors">Colors (fills, strokes, fonts)</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-spacing" checked /><label for="opt-spacing">Spacing (padding, gap)</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-radius" checked /><label for="opt-radius">Border radius</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-effects" checked /><label for="opt-effects">Effects (shadows, blurs)</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-dimensions" checked /><label for="opt-dimensions">Dimensions (width, height, min/max)</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-typography" checked /><label for="opt-typography">Typography (text styles + variables)</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-layout" checked /><label for="opt-layout">Layout grids</label></div>
+    <div class="option-row"><input type="checkbox" id="opt-misc" checked /><label for="opt-misc">Misc (opacity, visibility, stroke weight)</label></div>
+  </div>
+
+  <button id="btn-run">Rebind Selected Frame</button>
+  <div id="progress" class="progress" style="display:none;"></div>
+
+  <div id="results" style="display:none;">
+    <div class="section">
+      <div class="section-title">Learning</div>
+      <div class="stat-row"><span>Source nodes scanned</span><span class="stat-value" id="s-src">0</span></div>
+      <div class="stat-row"><span>Colors learned</span><span class="stat-value info" id="s-cl">0</span></div>
+      <div class="stat-row"><span>Floats learned</span><span class="stat-value info" id="s-fl">0</span></div>
+      <div class="stat-row"><span>Text styles learned</span><span class="stat-value info" id="s-tsl">0</span></div>
+      <div class="stat-row"><span>Effects learned</span><span class="stat-value info" id="s-el">0</span></div>
+      <div class="stat-row"><span>Local fallbacks added</span><span class="stat-value" id="s-lfa">0</span></div>
+      <div class="stat-row"><span>Primitives upgraded</span><span class="stat-value" id="s-pu">0</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Rebound</div>
+      <div class="stat-row"><span>Target nodes scanned</span><span class="stat-value" id="s-tgt">0</span></div>
+
+      <div class="group-header">Colors</div>
+      <div class="stat-row"><span>Fills</span><span class="stat-value success" id="s-fills">0</span></div>
+      <div class="stat-row"><span>Strokes</span><span class="stat-value success" id="s-strokes">0</span></div>
+      <div class="stat-row"><span>Fuzzy matches</span><span class="stat-value info" id="s-fuzzy">0</span></div>
+
+      <div class="group-header">Layout</div>
+      <div class="stat-row"><span>Spacing</span><span class="stat-value success" id="s-spacing">0</span></div>
+      <div class="stat-row"><span>Border radius</span><span class="stat-value success" id="s-radius">0</span></div>
+      <div class="stat-row"><span>Dimensions</span><span class="stat-value success" id="s-dims">0</span></div>
+      <div class="stat-row"><span>Grid gaps</span><span class="stat-value success" id="s-ggaps">0</span></div>
+      <div class="stat-row"><span>Layout grids</span><span class="stat-value success" id="s-lgrids">0</span></div>
+
+      <div class="group-header">Effects</div>
+      <div class="stat-row"><span>Effect fields</span><span class="stat-value success" id="s-effs">0</span></div>
+
+      <div class="group-header">Typography</div>
+      <div class="stat-row"><span>Text styles</span><span class="stat-value success" id="s-ts">0</span></div>
+      <div class="stat-row"><span>Typography vars</span><span class="stat-value success" id="s-tv">0</span></div>
+      <div class="stat-row"><span>Fonts fixed</span><span class="stat-value success" id="s-fonts">0</span></div>
+
+      <div class="group-header">Misc</div>
+      <div class="stat-row"><span>Stroke weight</span><span class="stat-value success" id="s-sw">0</span></div>
+      <div class="stat-row"><span>Opacity</span><span class="stat-value success" id="s-op">0</span></div>
+      <div class="stat-row"><span>Visibility</span><span class="stat-value success" id="s-vis">0</span></div>
+      <div class="stat-row"><span>Characters</span><span class="stat-value success" id="s-chars">0</span></div>
+      <div class="stat-row"><span>Component props</span><span class="stat-value success" id="s-cp">0</span></div>
+    </div>
+
+    <div id="unmapped-section" class="section" style="display:none;">
+      <div class="section-title">Unmatched Colors</div>
+      <div id="unmapped-list" class="unmapped-list"></div>
+    </div>
+  </div>
+
+<script>
+  document.getElementById('btn-run').onclick = function() {
+    var options = {
+      colors: document.getElementById('opt-colors').checked,
+      spacing: document.getElementById('opt-spacing').checked,
+      radius: document.getElementById('opt-radius').checked,
+      effects: document.getElementById('opt-effects').checked,
+      dimensions: document.getElementById('opt-dimensions').checked,
+      typography: document.getElementById('opt-typography').checked,
+      layout: document.getElementById('opt-layout').checked,
+      misc: document.getElementById('opt-misc').checked,
+    };
+    document.getElementById('progress').style.display = 'block';
+    document.getElementById('progress').className = 'progress';
+    document.getElementById('progress').textContent = 'Starting...';
+    document.getElementById('results').style.display = 'none';
+    parent.postMessage({ pluginMessage: { type: 'run', options: options } }, '*');
+  };
+
+  window.onmessage = function(event) {
+    var msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'progress') {
+      document.getElementById('progress').textContent = msg.text;
+    }
+
+    if (msg.type === 'done') {
+      var r = msg.results;
+      var p = document.getElementById('progress');
+      p.className = 'progress done';
+      p.textContent = 'Complete!';
+      document.getElementById('results').style.display = 'block';
+
+      document.getElementById('s-src').textContent = r.sourceNodesScanned;
+      document.getElementById('s-cl').textContent = r.colorsLearned;
+      document.getElementById('s-fl').textContent = r.floatsLearned;
+      document.getElementById('s-tsl').textContent = r.textStylesLearned;
+      document.getElementById('s-el').textContent = r.effectsLearned;
+      document.getElementById('s-lfa').textContent = r.localFallbacksAdded;
+      document.getElementById('s-pu').textContent = r.primitivesUpgraded;
+
+      document.getElementById('s-tgt').textContent = r.targetNodesScanned;
+      document.getElementById('s-fills').textContent = r.fillsRebound;
+      document.getElementById('s-strokes').textContent = r.strokesRebound;
+      document.getElementById('s-fuzzy').textContent = r.fuzzyMatches;
+      document.getElementById('s-spacing').textContent = r.spacingRebound;
+      document.getElementById('s-radius').textContent = r.radiusRebound;
+      document.getElementById('s-dims').textContent = r.dimensionsRebound;
+      document.getElementById('s-ggaps').textContent = r.gridGapsRebound;
+      document.getElementById('s-lgrids').textContent = r.layoutGridsRebound;
+      document.getElementById('s-effs').textContent = r.effectFieldsRebound;
+      document.getElementById('s-ts').textContent = r.textStylesRebound;
+      document.getElementById('s-tv').textContent = r.typoVarsRebound;
+      document.getElementById('s-fonts').textContent = r.fontsFixed;
+      document.getElementById('s-sw').textContent = r.strokeWeightRebound;
+      document.getElementById('s-op').textContent = r.opacityRebound;
+      document.getElementById('s-vis').textContent = r.visibilityRebound;
+      document.getElementById('s-chars').textContent = r.charactersRebound;
+      document.getElementById('s-cp').textContent = r.componentPropsRebound;
+
+      var us = document.getElementById('unmapped-section');
+      var ul = document.getElementById('unmapped-list');
+      ul.innerHTML = '';
+      if (r.unmatchedColors && r.unmatchedColors.length > 0) {
+        us.style.display = 'block';
+        for (var i = 0; i < r.unmatchedColors.length; i++) {
+          var c = r.unmatchedColors[i];
+          var div = document.createElement('div');
+          div.className = 'unmapped-item';
+          div.innerHTML = '<div class="unmapped-swatch" style="background:' + c.hex + '"></div>' +
+            '<span class="unmapped-hex">' + c.hex + '</span>' +
+            '<span class="unmapped-count">' + c.count + 'x</span>';
+          ul.appendChild(div);
+        }
+      } else {
+        us.style.display = 'none';
+      }
+    }
+
+    if (msg.type === 'error') {
+      var ep = document.getElementById('progress');
+      ep.className = 'progress error';
+      ep.textContent = msg.text;
+    }
+  };
+</script>
+</body>
+</html>
