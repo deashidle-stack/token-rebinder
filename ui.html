@@ -11,6 +11,7 @@
       background: var(--figma-color-bg-brand, #0d99ff); color: #fff;
     }
     button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .section { margin-top: 12px; }
     .section-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; color: var(--figma-color-text-secondary, #999); }
     .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
@@ -62,7 +63,7 @@
 
     /* Upsell section */
     .upsell-section {
-      margin-top: 12px; padding: 14px; border-radius: 8px;
+      position: relative; margin-top: 12px; padding: 14px; border-radius: 8px;
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       border: 1px solid rgba(13, 153, 255, 0.3);
     }
@@ -73,6 +74,8 @@
       background: linear-gradient(135deg, #0d99ff 0%, #00d4aa 100%); color: #fff;
     }
     .upsell-section .btn-upgrade:hover { opacity: 0.9; }
+    .upsell-dismiss { position: absolute; top: 6px; right: 8px; background: none; border: none; color: #999; font-size: 16px; cursor: pointer; padding: 2px 6px; line-height: 1; }
+    .upsell-dismiss:hover { color: #fff; }
 
     /* Health Score card */
     .health-card {
@@ -131,18 +134,18 @@
   </div>
 
   <button id="btn-run">Rebind Selected Frame</button>
-  <div id="progress" class="progress" style="display:none;"></div>
+  <div id="progress" class="progress" style="display:none;" aria-live="polite" role="status"></div>
 
   <div id="results" style="display:none;">
     <div class="section">
       <div class="section-title">Learning</div>
       <div class="stat-row"><span>Source nodes scanned</span><span class="stat-value" id="s-src">0</span></div>
       <div class="stat-row"><span>Colors learned</span><span class="stat-value info" id="s-cl">0</span></div>
-      <div class="stat-row"><span>Floats learned</span><span class="stat-value info" id="s-fl">0</span></div>
+      <div class="stat-row"><span>Values learned</span><span class="stat-value info" id="s-fl">0</span></div>
       <div class="stat-row"><span>Text styles learned</span><span class="stat-value info" id="s-tsl">0</span></div>
       <div class="stat-row"><span>Effects learned</span><span class="stat-value info" id="s-el">0</span></div>
       <div class="stat-row"><span>Local fallbacks added</span><span class="stat-value" id="s-lfa">0</span></div>
-      <div class="stat-row"><span>Primitives upgraded</span><span class="stat-value" id="s-pu">0</span></div>
+      <div class="stat-row"><span>Tokens upgraded</span><span class="stat-value" id="s-pu">0</span></div>
     </div>
 
     <div class="section">
@@ -202,6 +205,7 @@
   </div>
 
   <div id="upsell-section" class="upsell-section" style="display:none;">
+    <button class="upsell-dismiss" id="btn-upsell-dismiss" aria-label="Dismiss">&times;</button>
     <div class="upsell-text" id="upsell-text"></div>
     <button class="btn-upgrade" id="btn-upsell-upgrade">Upgrade — $12/mo</button>
   </div>
@@ -218,10 +222,14 @@
       layout: document.getElementById('opt-layout').checked,
       misc: document.getElementById('opt-misc').checked,
     };
+    var runBtn = document.getElementById('btn-run');
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running\u2026';
     document.getElementById('progress').style.display = 'block';
     document.getElementById('progress').className = 'progress';
     document.getElementById('progress').textContent = 'Starting...';
     document.getElementById('results').style.display = 'none';
+    document.getElementById('upsell-section').style.display = 'none';
     parent.postMessage({ pluginMessage: { type: 'run', options: options } }, '*');
   };
 
@@ -234,7 +242,7 @@
 
   document.getElementById('btn-export').onclick = function() {
     if (currentUITier === 'free') {
-      parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+      parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
       return;
     }
     parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
@@ -244,12 +252,15 @@
     parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
   };
 
+  document.getElementById('btn-upsell-dismiss').onclick = function() {
+    document.getElementById('upsell-section').style.display = 'none';
+  };
+
   document.getElementById('btn-share-score').onclick = function() {
     if (currentUITier === 'free') {
-      parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+      parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
       return;
     }
-    // Pro: could share score - for now same as export
     parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
   };
 
@@ -324,6 +335,9 @@
     }
 
     if (msg.type === 'done') {
+      var runBtn = document.getElementById('btn-run');
+      runBtn.disabled = false;
+      runBtn.textContent = 'Rebind Selected Frame';
       var r = msg.results;
       var p = document.getElementById('progress');
       p.className = 'progress done';
@@ -366,9 +380,18 @@
           var c = r.unmatchedColors[i];
           var div = document.createElement('div');
           div.className = 'unmapped-item';
-          div.innerHTML = '<div class="unmapped-swatch" style="background:' + c.hex + '"></div>' +
-            '<span class="unmapped-hex">' + c.hex + '</span>' +
-            '<span class="unmapped-count">' + c.count + 'x</span>';
+          var swatch = document.createElement('div');
+          swatch.className = 'unmapped-swatch';
+          swatch.style.background = c.hex;
+          var hexLabel = document.createElement('span');
+          hexLabel.className = 'unmapped-hex';
+          hexLabel.textContent = c.hex;
+          var countLabel = document.createElement('span');
+          countLabel.className = 'unmapped-count';
+          countLabel.textContent = c.count + 'x';
+          div.appendChild(swatch);
+          div.appendChild(hexLabel);
+          div.appendChild(countLabel);
           ul.appendChild(div);
         }
       } else {
@@ -410,6 +433,9 @@
     }
 
     if (msg.type === 'error') {
+      var runBtn = document.getElementById('btn-run');
+      runBtn.disabled = false;
+      runBtn.textContent = 'Rebind Selected Frame';
       var ep = document.getElementById('progress');
       ep.className = 'progress error';
       ep.textContent = msg.text;

@@ -1,16 +1,16 @@
 {
   "name": "Token Rebinder",
-  "id": "com.hidleeverform.token-rebinder",
+  "id": "1616450671951147919",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
   "capabilities": [],
-  "enableProposedApi": false,
   "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": ["https://token-rebinder-api.andreas-everform.workers.dev"]
   },
-  "permissions": [],
+  "permissions": ["currentuser"],
   "documentationUrl": "https://github.com/hidle-everform/token-rebinder",
   "relaunchButtons": [
     {

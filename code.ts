@@ -121,9 +121,9 @@ async function checkLicense(): Promise<"free" | "pro" | "team"> {
     }
 
     var user = figma.currentUser;
-    if (!user) return "free";
+    if (!user || !user.id) return "free";
 
-    var resp = await fetch(API_BASE + "/license/" + user.id);
+    var resp = await fetch(API_BASE + "/license/" + encodeURIComponent(user.id));
     if (!resp.ok) return cached ? cached.tier : "free";
 
     var data = await resp.json() as { tier: "free" | "pro" | "team" };
@@ -595,11 +595,11 @@ async function learnFromFile(
       await scanNode(topNode);
     } catch (_e) { /* skip */ }
 
-    if (scanned % 500 === 0) {
+    if (scanned === 1 || scanned % 500 === 0) {
       figma.ui.postMessage({
         type: "progress",
         text: "Learning: " + scanned + " nodes, " + store.colors.size + " colors, " +
-          store.floats.size + " floats, " + store.effects.size + " effects, " +
+          store.floats.size + " values, " + store.effects.size + " effects, " +
           store.textStyles.size + " text styles...",
       });
     }
@@ -893,17 +893,17 @@ async function applyToNode(
   results.targetNodesScanned++;
 
   // Track category totals for health score
-  if (node.hasOwnProperty("fills")) {
+  if ("fills" in node) {
     results.totalPaintNodes++;
   }
-  if (node.hasOwnProperty("paddingTop")) {
+  if ("paddingTop" in node) {
     results.totalLayoutNodes++;
   }
   if (node.type === "TEXT") {
     results.totalTextNodes++;
   }
   try {
-    if (node.hasOwnProperty("effects") && (node as any).effects && (node as any).effects.length > 0) {
+    if ("effects" in node && (node as any).effects && (node as any).effects.length > 0) {
       results.totalEffectNodes++;
     }
   } catch (e) { /* ignore */ }
@@ -1070,7 +1070,7 @@ async function applyToNode(
     var textNode = node as TextNode;
 
     // Fix font names
-    if (opts.colors) { // fonts always run with colors
+    if (opts.typography || opts.colors) {
       results.fontsFixed += await fixFonts(textNode);
     }
 
@@ -1146,7 +1146,7 @@ async function applyToNode(
         for (var cpi = 0; cpi < cpNames.length; cpi++) {
           var cpn = cpNames[cpi];
           var cpd = cpDefs2[cpn];
-          if (isAlreadyBound(node, "componentProperties")) continue;
+          if (cpd.boundVariables && cpd.boundVariables.value) continue;
           if (typeof cpd.value === "boolean") {
             var cpbk = bkey("cp:" + cpn, cpd.value);
             var cpbb = store.bools.get(cpbk);
@@ -1188,6 +1188,7 @@ figma.ui.onmessage = async function(msg) {
   }
 
   if (msg.type === "export-json") {
+    currentTier = await checkLicense();
     if (currentTier === "free") {
       figma.ui.postMessage({
         type: "upsell",
