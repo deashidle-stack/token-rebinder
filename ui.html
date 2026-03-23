@@ -261,6 +261,7 @@
       parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
       return;
     }
+    // TODO: implement share-score-card action (for now, same as export)
     parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
   };
 
