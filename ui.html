@@ -35,10 +35,89 @@
     .unmapped-hex { font-family: monospace; font-size: 10px; }
     .unmapped-count { margin-left: auto; color: #999; font-size: 10px; }
     .group-header { font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; margin-bottom: 2px; color: var(--figma-color-text-tertiary, #bbb); }
+
+    /* Tier bar */
+    .tier-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px; margin-bottom: 12px; border-radius: 6px;
+      background: var(--figma-color-bg-secondary, #f0f0f0);
+      font-size: 11px;
+    }
+    .tier-bar .tier-label { font-weight: 600; }
+    .tier-bar .tier-upgrade {
+      color: var(--figma-color-bg-brand, #0d99ff); cursor: pointer;
+      font-weight: 500; text-decoration: none;
+    }
+    .tier-bar .tier-upgrade:hover { text-decoration: underline; }
+
+    /* Export button */
+    .btn-export {
+      width: 100%; padding: 8px; border: 1px solid var(--figma-color-border, #ddd);
+      border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+      background: transparent; color: var(--figma-color-text, #333);
+      margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-export:hover { background: var(--figma-color-bg-secondary, #f0f0f0); }
+    .btn-export .lock-icon { font-size: 13px; opacity: 0.5; }
+
+    /* Upsell section */
+    .upsell-section {
+      margin-top: 12px; padding: 14px; border-radius: 8px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      border: 1px solid rgba(13, 153, 255, 0.3);
+    }
+    .upsell-section .upsell-text { color: #ccc; font-size: 11px; line-height: 1.5; margin-bottom: 10px; }
+    .upsell-section .btn-upgrade {
+      width: 100%; padding: 9px; border: none; border-radius: 6px; cursor: pointer;
+      font-size: 12px; font-weight: 600;
+      background: linear-gradient(135deg, #0d99ff 0%, #00d4aa 100%); color: #fff;
+    }
+    .upsell-section .btn-upgrade:hover { opacity: 0.9; }
+
+    /* Health Score card */
+    .health-card {
+      margin-top: 12px; padding: 16px; border-radius: 8px;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+    }
+    .health-card-header {
+      display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px;
+    }
+    .health-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: 600; }
+    .health-card-score { font-size: 32px; font-weight: 700; line-height: 1; color: #00d4aa; }
+    .health-bar-track {
+      width: 100%; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-bottom: 14px; overflow: hidden;
+    }
+    .health-bar-fill {
+      height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, #00d4aa, #0d99ff);
+      transition: width 0.6s ease;
+    }
+    .health-categories { display: flex; flex-direction: column; gap: 6px; }
+    .health-cat-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; }
+    .health-cat-label { color: #aaa; }
+    .health-cat-right { display: flex; align-items: center; gap: 8px; }
+    .health-cat-dots { letter-spacing: 2px; font-size: 10px; }
+    .health-cat-dots .filled { color: #00d4aa; }
+    .health-cat-dots .empty { color: rgba(255,255,255,0.15); }
+    .health-cat-pct { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+    .health-share-btn {
+      width: 100%; margin-top: 12px; padding: 8px; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+      background: transparent; color: #fff;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .health-share-btn:hover { background: rgba(255,255,255,0.05); }
+    .health-share-btn .lock-icon { font-size: 13px; opacity: 0.5; }
   </style>
 </head>
 <body>
   <h2>Token Rebinder</h2>
+
+  <div id="tier-bar" class="tier-bar">
+    <span class="tier-label" id="tier-label">Free</span>
+    <a class="tier-upgrade" id="tier-upgrade" href="#">Upgrade to Pro →</a>
+  </div>
 
   <div class="options">
     <div class="option-row"><input type="checkbox" id="opt-colors" checked /><label for="opt-colors">Colors (fills, strokes, fonts)</label></div>
@@ -98,10 +177,33 @@
       <div class="stat-row"><span>Component props</span><span class="stat-value success" id="s-cp">0</span></div>
     </div>
 
+    <button id="btn-export" class="btn-export">
+      <span id="export-lock" class="lock-icon">🔒</span>Export JSON Mapping
+    </button>
+
     <div id="unmapped-section" class="section" style="display:none;">
       <div class="section-title">Unmatched Colors</div>
       <div id="unmapped-list" class="unmapped-list"></div>
     </div>
+
+    <div id="health-card" class="health-card" style="display:none;">
+      <div class="health-card-header">
+        <span class="health-card-title">Token Health Score</span>
+        <span class="health-card-score" id="health-score">0%</span>
+      </div>
+      <div class="health-bar-track">
+        <div class="health-bar-fill" id="health-bar" style="width:0%"></div>
+      </div>
+      <div class="health-categories" id="health-categories"></div>
+      <button id="btn-share-score" class="health-share-btn">
+        <span id="share-lock" class="lock-icon">🔒</span>Share Score Card
+      </button>
+    </div>
+  </div>
+
+  <div id="upsell-section" class="upsell-section" style="display:none;">
+    <div class="upsell-text" id="upsell-text"></div>
+    <button class="btn-upgrade" id="btn-upsell-upgrade">Upgrade — $12/mo</button>
   </div>
 
 <script>
@@ -122,6 +224,96 @@
     document.getElementById('results').style.display = 'none';
     parent.postMessage({ pluginMessage: { type: 'run', options: options } }, '*');
   };
+
+  var currentUITier = 'free';
+
+  document.getElementById('tier-upgrade').onclick = function(e) {
+    e.preventDefault();
+    parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
+  };
+
+  document.getElementById('btn-export').onclick = function() {
+    if (currentUITier === 'free') {
+      parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+      return;
+    }
+    parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+  };
+
+  document.getElementById('btn-upsell-upgrade').onclick = function() {
+    parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
+  };
+
+  document.getElementById('btn-share-score').onclick = function() {
+    if (currentUITier === 'free') {
+      parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+      return;
+    }
+    // Pro: could share score - for now same as export
+    parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
+  };
+
+  function updateTierUI(tier) {
+    currentUITier = tier;
+    var label = document.getElementById('tier-label');
+    var upgrade = document.getElementById('tier-upgrade');
+    var exportLock = document.getElementById('export-lock');
+    var shareLock = document.getElementById('share-lock');
+
+    if (tier === 'free') {
+      label.textContent = 'Free';
+      upgrade.style.display = 'inline';
+      exportLock.style.display = 'inline';
+      shareLock.style.display = 'inline';
+    } else if (tier === 'pro') {
+      label.textContent = 'Pro';
+      upgrade.style.display = 'none';
+      exportLock.style.display = 'none';
+      shareLock.style.display = 'none';
+    } else {
+      label.textContent = 'Team';
+      upgrade.style.display = 'none';
+      exportLock.style.display = 'none';
+      shareLock.style.display = 'none';
+    }
+  }
+
+  function renderHealthScore(healthScore, categoryScores) {
+    var card = document.getElementById('health-card');
+    if (typeof healthScore !== 'number') { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    document.getElementById('health-score').textContent = healthScore + '%';
+    document.getElementById('health-bar').style.width = healthScore + '%';
+
+    var cats = document.getElementById('health-categories');
+    cats.innerHTML = '';
+    var categories = [
+      { label: 'Colors', key: 'colors' },
+      { label: 'Layout', key: 'layout' },
+      { label: 'Typography', key: 'typography' },
+      { label: 'Effects', key: 'effects' }
+    ];
+    for (var i = 0; i < categories.length; i++) {
+      var cat = categories[i];
+      var val = categoryScores && categoryScores[cat.key] ? categoryScores[cat.key] : 0;
+      var filled = Math.round(val / 20);
+      var dots = '';
+      for (var d = 0; d < 5; d++) {
+        if (d < filled) {
+          dots += '<span class="filled">●</span>';
+        } else {
+          dots += '<span class="empty">○</span>';
+        }
+      }
+      var row = document.createElement('div');
+      row.className = 'health-cat-row';
+      row.innerHTML = '<span class="health-cat-label">' + cat.label + '</span>' +
+        '<span class="health-cat-right"><span class="health-cat-dots">' + dots + '</span>' +
+        '<span class="health-cat-pct">' + val + '%</span></span>';
+      cats.appendChild(row);
+    }
+  }
 
   window.onmessage = function(event) {
     var msg = event.data.pluginMessage;
@@ -182,6 +374,39 @@
       } else {
         us.style.display = 'none';
       }
+
+      // Update tier from done message
+      if (msg.tier) {
+        updateTierUI(msg.tier);
+      }
+
+      // Render health score card
+      renderHealthScore(msg.healthScore, msg.categoryScores);
+
+      // Hide upsell when a run completes
+      document.getElementById('upsell-section').style.display = 'none';
+    }
+
+    if (msg.type === 'tier') {
+      updateTierUI(msg.tier);
+    }
+
+    if (msg.type === 'upsell') {
+      var upsellSection = document.getElementById('upsell-section');
+      document.getElementById('upsell-text').textContent = msg.text;
+      upsellSection.style.display = 'block';
+    }
+
+    if (msg.type === 'export-data') {
+      var blob = new Blob([msg.json], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'token-rebinder-mapping.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
 
     if (msg.type === 'error') {

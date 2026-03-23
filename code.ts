@@ -54,6 +54,10 @@ interface Results {
   localFallbacksAdded: number;
   primitivesUpgraded: number;
   unmatchedColors: Array<{ hex: string; count: number }>;
+  totalPaintNodes: number;
+  totalLayoutNodes: number;
+  totalTextNodes: number;
+  totalEffectNodes: number;
 }
 
 interface LearnedBinding {
@@ -98,6 +102,52 @@ function createStore(): LearnedStore {
     layoutGrids: new Map(),
     typoVars: new Map(),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LICENSE
+// ═══════════════════════════════════════════════════════════════════
+
+var API_BASE = "https://token-rebinder-api.andreas-everform.workers.dev";
+var LICENSE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+async function checkLicense(): Promise<"free" | "pro" | "team"> {
+  try {
+    var cached = await figma.clientStorage.getAsync("license") as { tier: "free" | "pro" | "team"; checkedAt: number } | undefined;
+    var now = Date.now();
+
+    if (cached && cached.checkedAt && (now - cached.checkedAt) < LICENSE_TTL) {
+      return cached.tier;
+    }
+
+    var user = figma.currentUser;
+    if (!user) return "free";
+
+    var resp = await fetch(API_BASE + "/license/" + user.id);
+    if (!resp.ok) return cached ? cached.tier : "free";
+
+    var data = await resp.json() as { tier: "free" | "pro" | "team" };
+    var license = { tier: data.tier, checkedAt: now };
+    await figma.clientStorage.setAsync("license", license);
+    return data.tier;
+  } catch (e) {
+    var fallback = await figma.clientStorage.getAsync("license") as { tier: "free" | "pro" | "team" } | undefined;
+    return fallback ? fallback.tier : "free";
+  }
+}
+
+async function checkFileAccess(tier: "free" | "pro" | "team"): Promise<boolean> {
+  if (tier !== "free") return true;
+
+  var fileKey = figma.fileKey;
+  if (!fileKey) return true;
+
+  var stored = await figma.clientStorage.getAsync("activeFile") as string | undefined;
+  if (!stored) {
+    await figma.clientStorage.setAsync("activeFile", fileKey);
+    return true;
+  }
+  return stored === fileKey;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -842,6 +892,22 @@ async function applyToNode(
 ): Promise<void> {
   results.targetNodesScanned++;
 
+  // Track category totals for health score
+  if (node.hasOwnProperty("fills")) {
+    results.totalPaintNodes++;
+  }
+  if (node.hasOwnProperty("paddingTop")) {
+    results.totalLayoutNodes++;
+  }
+  if (node.type === "TEXT") {
+    results.totalTextNodes++;
+  }
+  try {
+    if (node.hasOwnProperty("effects") && (node as any).effects && (node as any).effects.length > 0) {
+      results.totalEffectNodes++;
+    }
+  } catch (e) { /* ignore */ }
+
   if (results.targetNodesScanned % 100 === 0) {
     figma.ui.postMessage({
       type: "progress",
@@ -1111,9 +1177,58 @@ async function applyToNode(
 
 figma.showUI(__html__, { width: 360, height: 780, themeColors: true });
 
+var currentTier: "free" | "pro" | "team" = "free";
+var lastStore: LearnedStore = createStore();
+var lastHealthScore = 0;
+
 figma.ui.onmessage = async function(msg) {
+  if (msg.type === "open-upgrade") {
+    figma.openExternal(API_BASE + "/auth/figma?tier=pro");
+    return;
+  }
+
+  if (msg.type === "export-json") {
+    if (currentTier === "free") {
+      figma.ui.postMessage({
+        type: "upsell",
+        feature: "export",
+        text: "Export token mappings as JSON is a Pro feature.",
+      });
+      return;
+    }
+    var mapping = {
+      fileKey: figma.fileKey,
+      exportedAt: new Date().toISOString(),
+      colors: Array.from(lastStore.colors.entries()).map(function(e) {
+        return { hex: e[0], variable: e[1].name };
+      }),
+      floats: Array.from(lastStore.floats.entries()).map(function(e) {
+        return { key: e[0], variable: e[1].name };
+      }),
+      textStyles: Array.from(lastStore.textStyles.entries()).map(function(e) {
+        return { key: e[0], styleId: e[1].textStyleId };
+      }),
+      healthScore: lastHealthScore,
+    };
+    figma.ui.postMessage({ type: "export-data", json: JSON.stringify(mapping, null, 2) });
+    return;
+  }
+
   if (msg.type !== "run") return;
   var opts = msg.options as RunOptions;
+
+  currentTier = await checkLicense();
+  figma.ui.postMessage({ type: "tier", tier: currentTier });
+
+  var hasAccess = await checkFileAccess(currentTier);
+  if (!hasAccess) {
+    figma.ui.postMessage({
+      type: "upsell",
+      feature: "multi-file",
+      text: "Free tier is limited to one Figma file. Upgrade to Pro for unlimited files.",
+    });
+    return;
+  }
 
   try {
     var selection = figma.currentPage.selection;
@@ -1168,6 +1283,10 @@ figma.ui.onmessage = async function(msg) {
       localFallbacksAdded: localAdded,
       primitivesUpgraded: upgraded,
       unmatchedColors: [],
+      totalPaintNodes: 0,
+      totalLayoutNodes: 0,
+      totalTextNodes: 0,
+      totalEffectNodes: 0,
     };
 
     var unmatchedTracker = new Map<string, number>();
@@ -1181,7 +1300,42 @@ figma.ui.onmessage = async function(msg) {
       .sort(function(a, b) { return b.count - a.count; })
       .slice(0, 20);
 
-    figma.ui.postMessage({ type: "done", results: results });
+    // Store for export
+    lastStore = store;
+
+    // Compute health score
+    var totalRebound = results.fillsRebound + results.strokesRebound + results.spacingRebound
+      + results.radiusRebound + results.dimensionsRebound + results.effectFieldsRebound
+      + results.strokeWeightRebound + results.typoVarsRebound + results.textStylesRebound
+      + results.fontsFixed + results.layoutGridsRebound + results.opacityRebound
+      + results.visibilityRebound + results.gridGapsRebound + results.charactersRebound
+      + results.componentPropsRebound;
+
+    var totalScanned = results.totalPaintNodes + results.totalLayoutNodes
+      + results.totalTextNodes + results.totalEffectNodes;
+
+    var healthScore = totalScanned > 0 ? Math.round((totalRebound / totalScanned) * 100) : 0;
+    if (healthScore > 100) healthScore = 100;
+
+    var categoryScores = {
+      colors: results.totalPaintNodes > 0
+        ? Math.min(Math.round(((results.fillsRebound + results.strokesRebound) / results.totalPaintNodes) * 100), 100) : 0,
+      layout: results.totalLayoutNodes > 0
+        ? Math.min(Math.round(((results.spacingRebound + results.radiusRebound + results.dimensionsRebound + results.gridGapsRebound) / results.totalLayoutNodes) * 100), 100) : 0,
+      typography: results.totalTextNodes > 0
+        ? Math.min(Math.round(((results.typoVarsRebound + results.textStylesRebound + results.fontsFixed) / results.totalTextNodes) * 100), 100) : 0,
+      effects: results.totalEffectNodes > 0
+        ? Math.min(Math.round((results.effectFieldsRebound / results.totalEffectNodes) * 100), 100) : 0,
+    };
+
+    lastHealthScore = healthScore;
+
+    // Version history metadata on free tier
+    if (currentTier === "free") {
+      figma.currentPage.setPluginData("token-rebinder", "Restored by Token Rebinder — " + new Date().toISOString());
+    }
+
+    figma.ui.postMessage({ type: "done", results: results, tier: currentTier, healthScore: healthScore, categoryScores: categoryScores });
   } catch (error) {
     figma.ui.postMessage({
       type: "error",

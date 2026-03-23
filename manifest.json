@@ -8,7 +8,7 @@
   "enableProposedApi": false,
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["none"]
+    "allowedDomains": ["https://token-rebinder-api.andreas-everform.workers.dev"]
   },
   "permissions": [],
   "documentationUrl": "https://github.com/hidle-everform/token-rebinder",
