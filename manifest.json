@@ -11,7 +11,7 @@
     "allowedDomains": ["https://token-rebinder-api.andreas-everform.workers.dev"]
   },
   "permissions": ["currentuser"],
-  "documentationUrl": "https://github.com/hidle-everform/token-rebinder",
+  "documentationUrl": "https://tokenrebinder.everform.io",
   "relaunchButtons": [
     {
       "command": "rebind",

@@ -58,6 +58,7 @@ interface Results {
   totalLayoutNodes: number;
   totalTextNodes: number;
   totalEffectNodes: number;
+  skippedNodes: number;
 }
 
 interface LearnedBinding {
@@ -148,6 +149,16 @@ async function checkFileAccess(tier: "free" | "pro" | "team"): Promise<boolean> 
     return true;
   }
   return stored === fileKey;
+}
+
+function trackEvent(event: string, tier: string, payload?: Record<string, unknown>): void {
+  try {
+    fetch(API_BASE + "/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: event, tier: tier, payload: payload }),
+    });
+  } catch (_e) { /* fire and forget */ }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1070,7 +1081,7 @@ async function applyToNode(
     var textNode = node as TextNode;
 
     // Fix font names
-    if (opts.typography || opts.colors) {
+    if (opts.typography) {
       results.fontsFixed += await fixFonts(textNode);
     }
 
@@ -1166,7 +1177,9 @@ async function applyToNode(
   if ("children" in node) {
     var ch = (node as FrameNode).children;
     for (var ri = 0; ri < ch.length; ri++) {
-      await applyToNode(ch[ri], store, opts, results, unmatchedColors);
+      try {
+        await applyToNode(ch[ri], store, opts, results, unmatchedColors);
+      } catch (_e) { results.skippedNodes++; }
     }
   }
 }
@@ -1181,8 +1194,16 @@ var currentTier: "free" | "pro" | "team" = "free";
 var lastStore: LearnedStore = createStore();
 var lastHealthScore = 0;
 
+// Track plugin open + sync tier on launch
+checkLicense().then(function(t) {
+  currentTier = t;
+  figma.ui.postMessage({ type: "tier", tier: t });
+  trackEvent("plugin_open", t);
+});
+
 figma.ui.onmessage = async function(msg) {
   if (msg.type === "open-upgrade") {
+    trackEvent("upgrade_click", currentTier);
     figma.openExternal(API_BASE + "/auth/figma?tier=pro");
     return;
   }
@@ -1212,6 +1233,7 @@ figma.ui.onmessage = async function(msg) {
       healthScore: lastHealthScore,
     };
     figma.ui.postMessage({ type: "export-data", json: JSON.stringify(mapping, null, 2) });
+    trackEvent("export_json", currentTier);
     return;
   }
 
@@ -1288,6 +1310,7 @@ figma.ui.onmessage = async function(msg) {
       totalLayoutNodes: 0,
       totalTextNodes: 0,
       totalEffectNodes: 0,
+      skippedNodes: 0,
     };
 
     var unmatchedTracker = new Map<string, number>();
@@ -1330,6 +1353,21 @@ figma.ui.onmessage = async function(msg) {
     };
 
     lastHealthScore = healthScore;
+
+    trackEvent("plugin_run", currentTier, {
+      healthScore: healthScore,
+      nodesScanned: results.targetNodesScanned,
+      totalRebound: totalRebound,
+      skippedNodes: results.skippedNodes,
+      bindingTypes: {
+        fills: results.fillsRebound,
+        strokes: results.strokesRebound,
+        spacing: results.spacingRebound,
+        radius: results.radiusRebound,
+        effects: results.effectFieldsRebound,
+        typography: results.typoVarsRebound + results.textStylesRebound,
+      },
+    });
 
     // Version history metadata on free tier
     if (currentTier === "free") {

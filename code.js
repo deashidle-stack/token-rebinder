@@ -25,6 +25,57 @@ function createStore() {
     };
 }
 // ═══════════════════════════════════════════════════════════════════
+// LICENSE
+// ═══════════════════════════════════════════════════════════════════
+var API_BASE = "https://token-rebinder-api.andreas-everform.workers.dev";
+var LICENSE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+async function checkLicense() {
+    try {
+        var cached = await figma.clientStorage.getAsync("license");
+        var now = Date.now();
+        if (cached && cached.checkedAt && (now - cached.checkedAt) < LICENSE_TTL) {
+            return cached.tier;
+        }
+        var user = figma.currentUser;
+        if (!user || !user.id)
+            return "free";
+        var resp = await fetch(API_BASE + "/license/" + encodeURIComponent(user.id));
+        if (!resp.ok)
+            return cached ? cached.tier : "free";
+        var data = await resp.json();
+        var license = { tier: data.tier, checkedAt: now };
+        await figma.clientStorage.setAsync("license", license);
+        return data.tier;
+    }
+    catch (e) {
+        var fallback = await figma.clientStorage.getAsync("license");
+        return fallback ? fallback.tier : "free";
+    }
+}
+async function checkFileAccess(tier) {
+    if (tier !== "free")
+        return true;
+    var fileKey = figma.fileKey;
+    if (!fileKey)
+        return true;
+    var stored = await figma.clientStorage.getAsync("activeFile");
+    if (!stored) {
+        await figma.clientStorage.setAsync("activeFile", fileKey);
+        return true;
+    }
+    return stored === fileKey;
+}
+function trackEvent(event, tier, payload) {
+    try {
+        fetch(API_BASE + "/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event: event, tier: tier, payload: payload }),
+        });
+    }
+    catch (_e) { /* fire and forget */ }
+}
+// ═══════════════════════════════════════════════════════════════════
 // FIELD DISPATCH TABLES
 // ═══════════════════════════════════════════════════════════════════
 /** All scalar VariableBindableNodeField values grouped by category */
@@ -437,11 +488,11 @@ async function learnFromFile(excludeIds, store) {
             await scanNode(topNode);
         }
         catch (_e) { /* skip */ }
-        if (scanned % 500 === 0) {
+        if (scanned === 1 || scanned % 500 === 0) {
             figma.ui.postMessage({
                 type: "progress",
                 text: "Learning: " + scanned + " nodes, " + store.colors.size + " colors, " +
-                    store.floats.size + " floats, " + store.effects.size + " effects, " +
+                    store.floats.size + " values, " + store.effects.size + " effects, " +
                     store.textStyles.size + " text styles...",
             });
         }
@@ -778,6 +829,22 @@ function incCounter(field, r) {
 }
 async function applyToNode(node, store, opts, results, unmatchedColors) {
     results.targetNodesScanned++;
+    // Track category totals for health score
+    if ("fills" in node) {
+        results.totalPaintNodes++;
+    }
+    if ("paddingTop" in node) {
+        results.totalLayoutNodes++;
+    }
+    if (node.type === "TEXT") {
+        results.totalTextNodes++;
+    }
+    try {
+        if ("effects" in node && node.effects && node.effects.length > 0) {
+            results.totalEffectNodes++;
+        }
+    }
+    catch (e) { /* ignore */ }
     if (results.targetNodesScanned % 100 === 0) {
         figma.ui.postMessage({
             type: "progress",
@@ -951,7 +1018,7 @@ async function applyToNode(node, store, opts, results, unmatchedColors) {
     if (node.type === "TEXT") {
         var textNode = node;
         // Fix font names
-        if (opts.colors) { // fonts always run with colors
+        if (opts.typography) {
             results.fontsFixed += await fixFonts(textNode);
         }
         // Apply text style
@@ -1032,7 +1099,7 @@ async function applyToNode(node, store, opts, results, unmatchedColors) {
                 for (var cpi = 0; cpi < cpNames.length; cpi++) {
                     var cpn = cpNames[cpi];
                     var cpd = cpDefs2[cpn];
-                    if (isAlreadyBound(node, "componentProperties"))
+                    if (cpd.boundVariables && cpd.boundVariables.value)
                         continue;
                     if (typeof cpd.value === "boolean") {
                         var cpbk = bkey("cp:" + cpn, cpd.value);
@@ -1054,7 +1121,12 @@ async function applyToNode(node, store, opts, results, unmatchedColors) {
     if ("children" in node) {
         var ch = node.children;
         for (var ri = 0; ri < ch.length; ri++) {
-            await applyToNode(ch[ri], store, opts, results, unmatchedColors);
+            try {
+                await applyToNode(ch[ri], store, opts, results, unmatchedColors);
+            }
+            catch (_e) {
+                results.skippedNodes++;
+            }
         }
     }
 }
@@ -1062,10 +1134,63 @@ async function applyToNode(node, store, opts, results, unmatchedColors) {
 // UI + ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════
 figma.showUI(__html__, { width: 360, height: 780, themeColors: true });
+var currentTier = "free";
+var lastStore = createStore();
+var lastHealthScore = 0;
+// Track plugin open + sync tier on launch
+checkLicense().then(function (t) {
+    currentTier = t;
+    figma.ui.postMessage({ type: "tier", tier: t });
+    trackEvent("plugin_open", t);
+});
 figma.ui.onmessage = async function (msg) {
+    if (msg.type === "open-upgrade") {
+        trackEvent("upgrade_click", currentTier);
+        figma.openExternal(API_BASE + "/auth/figma?tier=pro");
+        return;
+    }
+    if (msg.type === "export-json") {
+        currentTier = await checkLicense();
+        if (currentTier === "free") {
+            figma.ui.postMessage({
+                type: "upsell",
+                feature: "export",
+                text: "Export token mappings as JSON is a Pro feature.",
+            });
+            return;
+        }
+        var mapping = {
+            fileKey: figma.fileKey,
+            exportedAt: new Date().toISOString(),
+            colors: Array.from(lastStore.colors.entries()).map(function (e) {
+                return { hex: e[0], variable: e[1].name };
+            }),
+            floats: Array.from(lastStore.floats.entries()).map(function (e) {
+                return { key: e[0], variable: e[1].name };
+            }),
+            textStyles: Array.from(lastStore.textStyles.entries()).map(function (e) {
+                return { key: e[0], styleId: e[1].textStyleId };
+            }),
+            healthScore: lastHealthScore,
+        };
+        figma.ui.postMessage({ type: "export-data", json: JSON.stringify(mapping, null, 2) });
+        trackEvent("export_json", currentTier);
+        return;
+    }
     if (msg.type !== "run")
         return;
     var opts = msg.options;
+    currentTier = await checkLicense();
+    figma.ui.postMessage({ type: "tier", tier: currentTier });
+    var hasAccess = await checkFileAccess(currentTier);
+    if (!hasAccess) {
+        figma.ui.postMessage({
+            type: "upsell",
+            feature: "multi-file",
+            text: "Free tier is limited to one Figma file. Upgrade to Pro for unlimited files.",
+        });
+        return;
+    }
     try {
         var selection = figma.currentPage.selection;
         if (selection.length === 0) {
@@ -1113,6 +1238,11 @@ figma.ui.onmessage = async function (msg) {
             localFallbacksAdded: localAdded,
             primitivesUpgraded: upgraded,
             unmatchedColors: [],
+            totalPaintNodes: 0,
+            totalLayoutNodes: 0,
+            totalTextNodes: 0,
+            totalEffectNodes: 0,
+            skippedNodes: 0,
         };
         var unmatchedTracker = new Map();
         for (var ni = 0; ni < selection.length; ni++) {
@@ -1122,7 +1252,50 @@ figma.ui.onmessage = async function (msg) {
             .map(function (e) { return { hex: e[0], count: e[1] }; })
             .sort(function (a, b) { return b.count - a.count; })
             .slice(0, 20);
-        figma.ui.postMessage({ type: "done", results: results });
+        // Store for export
+        lastStore = store;
+        // Compute health score
+        var totalRebound = results.fillsRebound + results.strokesRebound + results.spacingRebound
+            + results.radiusRebound + results.dimensionsRebound + results.effectFieldsRebound
+            + results.strokeWeightRebound + results.typoVarsRebound + results.textStylesRebound
+            + results.fontsFixed + results.layoutGridsRebound + results.opacityRebound
+            + results.visibilityRebound + results.gridGapsRebound + results.charactersRebound
+            + results.componentPropsRebound;
+        var totalScanned = results.totalPaintNodes + results.totalLayoutNodes
+            + results.totalTextNodes + results.totalEffectNodes;
+        var healthScore = totalScanned > 0 ? Math.round((totalRebound / totalScanned) * 100) : 0;
+        if (healthScore > 100)
+            healthScore = 100;
+        var categoryScores = {
+            colors: results.totalPaintNodes > 0
+                ? Math.min(Math.round(((results.fillsRebound + results.strokesRebound) / results.totalPaintNodes) * 100), 100) : 0,
+            layout: results.totalLayoutNodes > 0
+                ? Math.min(Math.round(((results.spacingRebound + results.radiusRebound + results.dimensionsRebound + results.gridGapsRebound) / results.totalLayoutNodes) * 100), 100) : 0,
+            typography: results.totalTextNodes > 0
+                ? Math.min(Math.round(((results.typoVarsRebound + results.textStylesRebound + results.fontsFixed) / results.totalTextNodes) * 100), 100) : 0,
+            effects: results.totalEffectNodes > 0
+                ? Math.min(Math.round((results.effectFieldsRebound / results.totalEffectNodes) * 100), 100) : 0,
+        };
+        lastHealthScore = healthScore;
+        trackEvent("plugin_run", currentTier, {
+            healthScore: healthScore,
+            nodesScanned: results.targetNodesScanned,
+            totalRebound: totalRebound,
+            skippedNodes: results.skippedNodes,
+            bindingTypes: {
+                fills: results.fillsRebound,
+                strokes: results.strokesRebound,
+                spacing: results.spacingRebound,
+                radius: results.radiusRebound,
+                effects: results.effectFieldsRebound,
+                typography: results.typoVarsRebound + results.textStylesRebound,
+            },
+        });
+        // Version history metadata on free tier
+        if (currentTier === "free") {
+            figma.currentPage.setPluginData("token-rebinder", "Restored by Token Rebinder — " + new Date().toISOString());
+        }
+        figma.ui.postMessage({ type: "done", results: results, tier: currentTier, healthScore: healthScore, categoryScores: categoryScores });
     }
     catch (error) {
         figma.ui.postMessage({
