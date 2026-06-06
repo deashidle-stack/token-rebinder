@@ -76,6 +76,12 @@ On a typical portal page (658 target nodes, 60K source nodes):
 
 Token Rebinder runs entirely within Figma's plugin sandbox. No data leaves your file. No network requests. No analytics. No account required.
 
+## Pricing
+
+**Free for everyone.** The full rebinding tool — all 50 binding types, unlimited Figma files, JSON export, Token Health Score — is free forever. No watermarks, no nags, no file limits.
+
+**Team — $29/month per editor (3+ seats).** For design-system organizations that want shared rulebooks, cross-file consistency scoring, audit log, and API access. See [tokenrebinder.everform.io/upgrade](https://tokenrebinder.everform.io/upgrade).
+
 ## License
 
 MIT — free to use, modify, and distribute.
