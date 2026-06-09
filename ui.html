@@ -3,15 +3,51 @@
 <head>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Inter, -apple-system, sans-serif; font-size: 12px; color: var(--figma-color-text); padding: 16px; }
+    html, body { height: 100%; }
+    /* Full-height flex shell: header stays put, the diff/results region fills all
+       remaining height and scrolls within itself — no dead space, no double scroll. */
+    body {
+      font-family: Inter, -apple-system, sans-serif; font-size: 12px; color: var(--figma-color-text);
+      padding: 12px 16px; display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+    }
+    /* Thin, subtle overlay scrollbars everywhere (replaces the chunky default bar). */
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.35); border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.55); }
+    ::-webkit-scrollbar-track { background: transparent; }
+    /* Sections above the diff keep their natural height. */
+    h2, #tier-bar, #idle-section, #btn-primary, #btn-cancel, #progress-section, #degraded-banner, #result-banner { flex-shrink: 0; }
+    /* Resize zones — drag the right edge for width, bottom edge for height, corner for both.
+       The strips sit in the body's outer margin, clear of content and scrollbars. */
+    .resize-edge { position: fixed; z-index: 10; }
+    #resize-right { top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+    #resize-bottom { left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+    #resize-corner { right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; z-index: 11; }
+    /* Hover hint so users discover the edges are draggable. */
+    #resize-right:hover, #resize-bottom:hover { background: rgba(13,153,255,0.28); }
+    #resize-corner::after {
+      content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px;
+      border-right: 2px solid var(--figma-color-text-tertiary, #bbb);
+      border-bottom: 2px solid var(--figma-color-text-tertiary, #bbb); opacity: 0.55;
+    }
     h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
-    button {
+    .muted { color: var(--figma-color-text-secondary, #999); }
+
+    button { font-family: inherit; }
+    .btn-primary {
       width: 100%; padding: 10px; border: none; border-radius: 6px; cursor: pointer;
-      font-size: 13px; font-weight: 600; margin-bottom: 12px;
+      font-size: 13px; font-weight: 600;
       background: var(--figma-color-bg-brand, #0d99ff); color: #fff;
     }
-    button:hover { opacity: 0.9; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      width: 100%; padding: 8px; border: 1px solid var(--figma-color-border, #ddd);
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+      background: transparent; color: var(--figma-color-text, #333); margin-top: 8px;
+    }
+    .btn-secondary:hover { background: var(--figma-color-bg-secondary, #f0f0f0); }
+
     .section { margin-top: 12px; }
     .section-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; color: var(--figma-color-text-secondary, #999); }
     .stat-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px; }
@@ -19,83 +55,121 @@
     .stat-value.success { color: #198038; }
     .stat-value.info { color: #0d99ff; }
     .stat-value.warning { color: #d97706; }
-    .progress {
-      padding: 8px; border-radius: 4px; margin-bottom: 8px;
-      background: var(--figma-color-bg-secondary, #f0f0f0);
-      font-size: 11px; color: #555; white-space: pre-wrap; max-height: 200px; overflow-y: auto;
-    }
-    .progress.done { background: #edf7ed; color: #198038; }
-    .progress.error { background: #fef2f0; color: #c23008; }
-    .options { margin-bottom: 16px; }
+
+    /* Options */
+    .options { margin-bottom: 12px; }
     .option-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
     .option-row label { cursor: pointer; user-select: none; }
     .option-row input[type="checkbox"] { cursor: pointer; }
-    .unmapped-list { margin-top: 8px; max-height: 100px; overflow-y: auto; font-size: 11px; }
-    .unmapped-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-    .unmapped-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
-    .unmapped-hex { font-family: monospace; font-size: 10px; }
-    .unmapped-count { margin-left: auto; color: #999; font-size: 10px; }
-    .group-header { font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; margin-bottom: 2px; color: var(--figma-color-text-tertiary, #bbb); }
+    .auto-apply-row { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; font-size: 11px; }
 
     /* Tier bar */
     .tier-bar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 6px 10px; margin-bottom: 12px; border-radius: 6px;
-      background: var(--figma-color-bg-secondary, #f0f0f0);
-      font-size: 11px;
+      background: var(--figma-color-bg-secondary, #f0f0f0); font-size: 11px;
     }
     .tier-bar .tier-label { font-weight: 600; }
-    .tier-bar .tier-upgrade {
-      color: var(--figma-color-bg-brand, #0d99ff); cursor: pointer;
-      font-weight: 500; text-decoration: none;
-    }
+    .tier-bar .tier-upgrade { color: var(--figma-color-bg-brand, #0d99ff); cursor: pointer; font-weight: 500; text-decoration: none; }
     .tier-bar .tier-upgrade:hover { text-decoration: underline; }
 
-    /* Export button */
-    .btn-export {
-      width: 100%; padding: 8px; border: 1px solid var(--figma-color-border, #ddd);
-      border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
-      background: transparent; color: var(--figma-color-text, #333);
-      margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px;
+    /* Stepper */
+    .stepper { display: flex; gap: 4px; margin: 12px 0 8px; }
+    .step {
+      flex: 1; text-align: center; font-size: 9px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.4px; padding: 6px 2px; border-radius: 5px;
+      background: var(--figma-color-bg-secondary, #f0f0f0); color: var(--figma-color-text-tertiary, #aaa);
+      position: relative;
     }
-    .btn-export:hover { background: var(--figma-color-bg-secondary, #f0f0f0); }
-    .btn-export .lock-icon { font-size: 13px; opacity: 0.5; }
+    .step.active { background: var(--figma-color-bg-brand, #0d99ff); color: #fff; }
+    .step.complete { background: #e7f4ea; color: #198038; }
+    .step.complete::after { content: " ✓"; }
 
-    /* Upsell section */
-    .upsell-section {
-      position: relative; margin-top: 12px; padding: 14px; border-radius: 8px;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      border: 1px solid rgba(13, 153, 255, 0.3);
-    }
-    .upsell-section .upsell-text { color: #ccc; font-size: 11px; line-height: 1.5; margin-bottom: 10px; }
-    .upsell-section .btn-upgrade {
-      width: 100%; padding: 9px; border: none; border-radius: 6px; cursor: pointer;
-      font-size: 12px; font-weight: 600;
-      background: linear-gradient(135deg, #0d99ff 0%, #00d4aa 100%); color: #fff;
-    }
-    .upsell-section .btn-upgrade:hover { opacity: 0.9; }
-    .upsell-dismiss { position: absolute; top: 6px; right: 8px; background: none; border: none; color: #999; font-size: 16px; cursor: pointer; padding: 2px 6px; line-height: 1; }
-    .upsell-dismiss:hover { color: #fff; }
+    /* Progress bar */
+    .progress-wrap { margin-bottom: 8px; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--figma-color-text-secondary, #777); }
+    .progress-track { width: 100%; height: 5px; border-radius: 3px; background: var(--figma-color-bg-secondary, #eee); overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; background: var(--figma-color-bg-brand, #0d99ff); width: 0%; transition: width 0.2s ease; }
+    .progress-fill.indeterminate { width: 35%; animation: slide 1.1s ease-in-out infinite; }
+    @keyframes slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
 
-    /* Health Score card */
-    .health-card {
-      margin-top: 12px; padding: 16px; border-radius: 8px;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: #fff;
+    /* Learning tally */
+    .tally { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .tally-chip { font-size: 10px; padding: 3px 7px; border-radius: 10px; background: var(--figma-color-bg-secondary, #f0f0f0); }
+    .tally-chip b { color: #0d99ff; font-variant-numeric: tabular-nums; }
+
+    /* Degenerate banner */
+    .banner {
+      margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; font-size: 10px; line-height: 1.5;
+      background: #fff7e6; color: #8a5a00; border: 1px solid #ffe2a8;
     }
-    .health-card-header {
-      display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px;
+
+    /* Tabs */
+    /* Diff + results fill all remaining vertical space and scroll internally. */
+    #diff-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #results { flex: 1; min-height: 0; overflow-y: auto; padding-right: 8px; }
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--figma-color-border, #e5e5e5); margin-bottom: 6px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; } /* tabs scroll silently — no chunky bar */
+    #unmapped-section { flex-shrink: 0; }
+    .tab {
+      padding: 6px 8px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+      color: var(--figma-color-text-secondary, #888); border-bottom: 2px solid transparent;
     }
+    .tab.active { color: var(--figma-color-text, #111); border-bottom-color: var(--figma-color-bg-brand, #0d99ff); }
+    .tab .tab-count {
+      display: inline-block; margin-left: 4px; font-size: 9px; padding: 0 5px; border-radius: 8px;
+      background: var(--figma-color-bg-secondary, #eee); color: var(--figma-color-text-secondary, #888); font-variant-numeric: tabular-nums;
+    }
+    .tab.active .tab-count { background: var(--figma-color-bg-brand, #0d99ff); color: #fff; }
+
+    /* Diff rows */
+    .tab-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 8px; }
+    .diff-row {
+      display: flex; align-items: center; gap: 6px; padding: 5px 4px; font-size: 11px;
+      border-bottom: 1px solid var(--figma-color-bg-secondary, #f2f2f2); cursor: default;
+    }
+    /* `from` (swatch + hex/field) is content-sized; only `to` (token name) absorbs extra
+       width, so widening the panel reveals long token names instead of inflating a gap. */
+    .diff-row .from { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 0 0 auto; max-width: 42%; }
+    .diff-row .arrow { color: var(--figma-color-text-tertiary, #bbb); flex-shrink: 0; }
+    .diff-row .to { display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 auto; }
+    .swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); flex-shrink: 0; }
+    .mono { font-family: monospace; font-size: 10px; }
+    .ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .field-chip { font-size: 9px; padding: 1px 5px; border-radius: 4px; background: var(--figma-color-bg-secondary, #eee); color: var(--figma-color-text-secondary, #777); flex-shrink: 0; }
+    .count { margin-left: auto; color: var(--figma-color-text-tertiary, #aaa); font-size: 10px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+    /* Provenance badges */
+    .badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; white-space: nowrap; }
+    .badge.learned { background: #e7f4ea; color: #198038; }
+    .badge.exact { background: #e6f0ff; color: #0d6fd9; }
+    .badge.upgraded { background: #e0f7f4; color: #0a8f80; }
+    .badge.fuzzy { background: #fff1e0; color: #b56a00; }
+    .badge.fallback { background: var(--figma-color-bg-secondary, #eee); color: var(--figma-color-text-secondary, #888); }
+
+    .empty-tab { padding: 18px 8px; text-align: center; color: var(--figma-color-text-tertiary, #bbb); font-size: 11px; }
+    .more-footer { padding: 6px; text-align: center; font-size: 10px; color: var(--figma-color-text-tertiary, #aaa); }
+
+    /* Unmatched */
+    .unmapped-list { margin-top: 8px; max-height: 110px; overflow-y: auto; }
+    .unmapped-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+    .unmapped-count { margin-left: auto; color: #999; font-size: 10px; }
+    .group-header { font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; margin-bottom: 2px; color: var(--figma-color-text-tertiary, #bbb); }
+
+    /* Applied/skipped banner */
+    .result-banner { padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 11px; }
+    .result-banner.ok { background: #edf7ed; color: #198038; }
+    .result-banner.warn { background: #fff7e6; color: #8a5a00; }
+    .progress-text { padding: 8px; border-radius: 4px; margin-bottom: 8px; background: var(--figma-color-bg-secondary, #f0f0f0); font-size: 11px; color: #555; }
+    .progress-text.error { background: #fef2f0; color: #c23008; }
+
+    /* Health card */
+    .health-card { margin-top: 12px; padding: 16px; border-radius: 8px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
+    .health-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
     .health-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; font-weight: 600; }
     .health-card-score { font-size: 32px; font-weight: 700; line-height: 1; color: #00d4aa; }
-    .health-bar-track {
-      width: 100%; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-bottom: 14px; overflow: hidden;
-    }
-    .health-bar-fill {
-      height: 100%; border-radius: 3px;
-      background: linear-gradient(90deg, #00d4aa, #0d99ff);
-      transition: width 0.6s ease;
-    }
+    .health-bar-track { width: 100%; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-bottom: 14px; overflow: hidden; }
+    .health-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #00d4aa, #0d99ff); transition: width 0.6s ease; }
     .health-categories { display: flex; flex-direction: column; gap: 6px; }
     .health-cat-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; }
     .health-cat-label { color: #aaa; }
@@ -104,74 +178,93 @@
     .health-cat-dots .filled { color: #00d4aa; }
     .health-cat-dots .empty { color: rgba(255,255,255,0.15); }
     .health-cat-pct { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
-    .health-share-btn {
-      width: 100%; margin-top: 12px; padding: 8px; border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
-      background: transparent; color: #fff;
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-    }
+    .health-share-btn { width: 100%; margin-top: 12px; padding: 8px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; background: transparent; color: #fff; }
     .health-share-btn:hover { background: rgba(255,255,255,0.05); }
-    .health-share-btn .lock-icon { font-size: 13px; opacity: 0.5; }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
   <h2>Token Rebinder</h2>
 
   <div id="tier-bar" class="tier-bar">
-    <span class="tier-label" id="tier-label">Free</span>
-    <a class="tier-upgrade" id="tier-upgrade" href="#">Upgrade to Pro →</a>
+    <span class="tier-label" id="tier-label">Free for everyone</span>
+    <a class="tier-upgrade" id="tier-upgrade" href="#">For teams →</a>
   </div>
 
-  <div class="options">
-    <div class="option-row"><input type="checkbox" id="opt-colors" checked /><label for="opt-colors">Colors (fills, strokes, fonts)</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-spacing" checked /><label for="opt-spacing">Spacing (padding, gap)</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-radius" checked /><label for="opt-radius">Border radius</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-effects" checked /><label for="opt-effects">Effects (shadows, blurs)</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-dimensions" checked /><label for="opt-dimensions">Dimensions (width, height, min/max)</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-typography" checked /><label for="opt-typography">Typography (text styles + variables)</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-layout" checked /><label for="opt-layout">Layout grids</label></div>
-    <div class="option-row"><input type="checkbox" id="opt-misc" checked /><label for="opt-misc">Misc (opacity, visibility, stroke weight)</label></div>
-  </div>
-
-  <button id="btn-run">Rebind Selected Frame</button>
-  <div id="progress" class="progress" style="display:none;" aria-live="polite" role="status"></div>
-
-  <div id="results" style="display:none;">
-    <div class="section">
-      <div class="section-title">Learning</div>
-      <div class="stat-row"><span>Source nodes scanned</span><span class="stat-value" id="s-src">0</span></div>
-      <div class="stat-row"><span>Colors learned</span><span class="stat-value info" id="s-cl">0</span></div>
-      <div class="stat-row"><span>Values learned</span><span class="stat-value info" id="s-fl">0</span></div>
-      <div class="stat-row"><span>Text styles learned</span><span class="stat-value info" id="s-tsl">0</span></div>
-      <div class="stat-row"><span>Effects learned</span><span class="stat-value info" id="s-el">0</span></div>
-      <div class="stat-row"><span>Local fallbacks added</span><span class="stat-value" id="s-lfa">0</span></div>
-      <div class="stat-row"><span>Tokens upgraded</span><span class="stat-value" id="s-pu">0</span></div>
+  <!-- IDLE: options + plan button -->
+  <div id="idle-section">
+    <div class="options">
+      <div class="option-row"><input type="checkbox" id="opt-colors" checked /><label for="opt-colors">Colors (fills, strokes, fonts)</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-spacing" checked /><label for="opt-spacing">Spacing (padding, gap)</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-radius" checked /><label for="opt-radius">Border radius</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-effects" checked /><label for="opt-effects">Effects (shadows, blurs)</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-dimensions" checked /><label for="opt-dimensions">Dimensions (width, height, min/max)</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-typography" checked /><label for="opt-typography">Typography (text styles + variables)</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-layout" checked /><label for="opt-layout">Layout grids</label></div>
+      <div class="option-row"><input type="checkbox" id="opt-misc" checked /><label for="opt-misc">Misc (opacity, visibility, stroke weight)</label></div>
+      <div class="auto-apply-row"><input type="checkbox" id="opt-auto" /><label for="opt-auto" class="muted">Skip review — apply automatically</label></div>
     </div>
+  </div>
+
+  <!-- Primary + cancel buttons -->
+  <button id="btn-primary" class="btn-primary">Plan rebind</button>
+  <button id="btn-cancel" class="btn-secondary hidden">Cancel</button>
+
+  <!-- Progress + stepper -->
+  <div id="progress-section" class="hidden">
+    <div class="stepper" id="stepper">
+      <div class="step" data-phase="1">Learn</div>
+      <div class="step" data-phase="2">Upgrade</div>
+      <div class="step" data-phase="3">Fallback</div>
+      <div class="step" data-phase="4">Apply</div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span id="progress-label-text">Starting…</span><span id="progress-count"></span></div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    </div>
+    <div class="tally hidden" id="tally"></div>
+  </div>
+
+  <!-- Degenerate-case banner -->
+  <div id="degraded-banner" class="banner hidden">
+    Few existing bindings to learn from on this page — suggestions are best-effort defaults. Run on a page that already uses your design system for higher confidence.
+  </div>
+
+  <!-- Diff review -->
+  <div id="diff-section" class="hidden">
+    <div class="tabs" id="tabs"></div>
+    <div class="tab-body" id="tab-body"></div>
+
+    <div id="unmapped-section" class="section hidden">
+      <div class="section-title">Unmatched colors</div>
+      <div id="unmapped-list" class="unmapped-list"></div>
+    </div>
+  </div>
+
+  <!-- Results (after commit) -->
+  <div id="results" class="hidden">
+    <div id="result-banner" class="result-banner ok"></div>
 
     <div class="section">
       <div class="section-title">Rebound</div>
       <div class="stat-row"><span>Target nodes scanned</span><span class="stat-value" id="s-tgt">0</span></div>
-
       <div class="group-header">Colors</div>
       <div class="stat-row"><span>Fills</span><span class="stat-value success" id="s-fills">0</span></div>
       <div class="stat-row"><span>Strokes</span><span class="stat-value success" id="s-strokes">0</span></div>
       <div class="stat-row"><span>Fuzzy matches</span><span class="stat-value info" id="s-fuzzy">0</span></div>
-
       <div class="group-header">Layout</div>
       <div class="stat-row"><span>Spacing</span><span class="stat-value success" id="s-spacing">0</span></div>
       <div class="stat-row"><span>Border radius</span><span class="stat-value success" id="s-radius">0</span></div>
       <div class="stat-row"><span>Dimensions</span><span class="stat-value success" id="s-dims">0</span></div>
       <div class="stat-row"><span>Grid gaps</span><span class="stat-value success" id="s-ggaps">0</span></div>
       <div class="stat-row"><span>Layout grids</span><span class="stat-value success" id="s-lgrids">0</span></div>
-
       <div class="group-header">Effects</div>
       <div class="stat-row"><span>Effect fields</span><span class="stat-value success" id="s-effs">0</span></div>
-
       <div class="group-header">Typography</div>
       <div class="stat-row"><span>Text styles</span><span class="stat-value success" id="s-ts">0</span></div>
       <div class="stat-row"><span>Typography vars</span><span class="stat-value success" id="s-tv">0</span></div>
       <div class="stat-row"><span>Fonts fixed</span><span class="stat-value success" id="s-fonts">0</span></div>
-
       <div class="group-header">Misc</div>
       <div class="stat-row"><span>Stroke weight</span><span class="stat-value success" id="s-sw">0</span></div>
       <div class="stat-row"><span>Opacity</span><span class="stat-value success" id="s-op">0</span></div>
@@ -180,268 +273,530 @@
       <div class="stat-row"><span>Component props</span><span class="stat-value success" id="s-cp">0</span></div>
     </div>
 
-    <button id="btn-export" class="btn-export">
-      <span id="export-lock" class="lock-icon">🔒</span>Export JSON Mapping
-    </button>
-
-    <div id="unmapped-section" class="section" style="display:none;">
-      <div class="section-title">Unmatched Colors</div>
-      <div id="unmapped-list" class="unmapped-list"></div>
-    </div>
-
-    <div id="health-card" class="health-card" style="display:none;">
+    <div id="health-card" class="health-card hidden">
       <div class="health-card-header">
         <span class="health-card-title">Token Health Score</span>
         <span class="health-card-score" id="health-score">0%</span>
       </div>
-      <div class="health-bar-track">
-        <div class="health-bar-fill" id="health-bar" style="width:0%"></div>
-      </div>
+      <div class="health-bar-track"><div class="health-bar-fill" id="health-bar" style="width:0%"></div></div>
       <div class="health-categories" id="health-categories"></div>
-      <button id="btn-share-score" class="health-share-btn">
-        <span id="share-lock" class="lock-icon">🔒</span>Share Score Card
-      </button>
+      <button id="btn-share-score" class="health-share-btn">Share Score Card</button>
     </div>
+
+    <button id="btn-export" class="btn-secondary">Export JSON Mapping</button>
   </div>
 
-  <div id="upsell-section" class="upsell-section" style="display:none;">
-    <button class="upsell-dismiss" id="btn-upsell-dismiss" aria-label="Dismiss">&times;</button>
-    <div class="upsell-text" id="upsell-text"></div>
-    <button class="btn-upgrade" id="btn-upsell-upgrade">Upgrade — $12/mo</button>
-  </div>
+  <div id="resize-right" class="resize-edge" title="Drag to resize width"></div>
+  <div id="resize-bottom" class="resize-edge" title="Drag to resize height"></div>
+  <div id="resize-corner" class="resize-edge" title="Drag to resize"></div>
 
-<script>
-  document.getElementById('btn-run').onclick = function() {
-    var options = {
-      colors: document.getElementById('opt-colors').checked,
-      spacing: document.getElementById('opt-spacing').checked,
-      radius: document.getElementById('opt-radius').checked,
-      effects: document.getElementById('opt-effects').checked,
-      dimensions: document.getElementById('opt-dimensions').checked,
-      typography: document.getElementById('opt-typography').checked,
-      layout: document.getElementById('opt-layout').checked,
-      misc: document.getElementById('opt-misc').checked,
+  <script>
+    // ── State ──
+    var TABS = ["colors", "dimensions", "typography", "effects", "misc"];
+    var TAB_LABELS = { colors: "Colors", dimensions: "Dimensions", typography: "Typography", effects: "Effects", misc: "Misc" };
+    var ROW_CAP = 200; // max rendered rows per tab
+    var currentUITier = "free";
+    var uiState = "idle"; // idle | planning | review | applying | done
+    var activeTab = "colors";
+    var tabCounts = { colors: 0, dimensions: 0, typography: 0, effects: 0, misc: 0 };
+    var tabRendered = { colors: 0, dimensions: 0, typography: 0, effects: 0, misc: 0 };
+    var tabBodies = {}; // tab -> container element
+    var rowMap = {};    // row signature -> { count, countEl } for live upsert during streaming
+
+    function $(id) { return document.getElementById(id); }
+    function show(id) { $(id).classList.remove("hidden"); }
+    function hide(id) { $(id).classList.add("hidden"); }
+
+    // ── Buttons ──
+    $("tier-upgrade").onclick = function(e) { e.preventDefault(); post({ type: "open-upgrade" }); };
+    $("btn-export").onclick = function() { post({ type: "export-json" }); };
+    $("btn-share-score").onclick = function() { post({ type: "share-score" }); };
+
+    $("btn-primary").onclick = function() {
+      if (uiState === "idle" || uiState === "done") {
+        startPlan();
+      } else if (uiState === "review") {
+        startCommit();
+      }
     };
-    var runBtn = document.getElementById('btn-run');
-    runBtn.disabled = true;
-    runBtn.textContent = 'Running\u2026';
-    document.getElementById('progress').style.display = 'block';
-    document.getElementById('progress').className = 'progress';
-    document.getElementById('progress').textContent = 'Starting...';
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('upsell-section').style.display = 'none';
-    parent.postMessage({ pluginMessage: { type: 'run', options: options } }, '*');
-  };
+    $("btn-cancel").onclick = function() {
+      post({ type: "cancel" });
+      resetToIdle();
+    };
 
-  var currentUITier = 'free';
+    function post(msg) { parent.postMessage({ pluginMessage: msg }, "*"); }
 
-  document.getElementById('tier-upgrade').onclick = function(e) {
-    e.preventDefault();
-    parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
-  };
-
-  document.getElementById('btn-export').onclick = function() {
-    if (currentUITier === 'free') {
-      parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
-      return;
-    }
-    parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
-  };
-
-  document.getElementById('btn-upsell-upgrade').onclick = function() {
-    parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
-  };
-
-  document.getElementById('btn-upsell-dismiss').onclick = function() {
-    document.getElementById('upsell-section').style.display = 'none';
-  };
-
-  document.getElementById('btn-share-score').onclick = function() {
-    if (currentUITier === 'free') {
-      parent.postMessage({ pluginMessage: { type: 'open-upgrade' } }, '*');
-      return;
-    }
-    // TODO: implement share-score-card action (for now, same as export)
-    parent.postMessage({ pluginMessage: { type: 'export-json' } }, '*');
-  };
-
-  function updateTierUI(tier) {
-    currentUITier = tier;
-    var label = document.getElementById('tier-label');
-    var upgrade = document.getElementById('tier-upgrade');
-    var exportLock = document.getElementById('export-lock');
-    var shareLock = document.getElementById('share-lock');
-
-    if (tier === 'free') {
-      label.textContent = 'Free';
-      upgrade.style.display = 'inline';
-      exportLock.style.display = 'inline';
-      shareLock.style.display = 'inline';
-    } else if (tier === 'pro') {
-      label.textContent = 'Pro';
-      upgrade.style.display = 'none';
-      exportLock.style.display = 'none';
-      shareLock.style.display = 'none';
-    } else {
-      label.textContent = 'Team';
-      upgrade.style.display = 'none';
-      exportLock.style.display = 'none';
-      shareLock.style.display = 'none';
-    }
-  }
-
-  function renderHealthScore(healthScore, categoryScores) {
-    var card = document.getElementById('health-card');
-    if (typeof healthScore !== 'number') { card.style.display = 'none'; return; }
-    card.style.display = 'block';
-
-    document.getElementById('health-score').textContent = healthScore + '%';
-    document.getElementById('health-bar').style.width = healthScore + '%';
-
-    var cats = document.getElementById('health-categories');
-    cats.innerHTML = '';
-    var categories = [
-      { label: 'Colors', key: 'colors' },
-      { label: 'Layout', key: 'layout' },
-      { label: 'Typography', key: 'typography' },
-      { label: 'Effects', key: 'effects' }
-    ];
-    for (var i = 0; i < categories.length; i++) {
-      var cat = categories[i];
-      var val = categoryScores && categoryScores[cat.key] ? categoryScores[cat.key] : 0;
-      var filled = Math.round(val / 20);
-      var dots = '';
-      for (var d = 0; d < 5; d++) {
-        if (d < filled) {
-          dots += '<span class="filled">●</span>';
-        } else {
-          dots += '<span class="empty">○</span>';
-        }
+    // ── Resizable window: right edge (width), bottom edge (height), corner (both) ──
+    (function () {
+      var mode = null; // "right" | "bottom" | "corner"
+      function startOn(id, m) {
+        $(id).addEventListener("pointerdown", function (e) { mode = m; e.preventDefault(); });
       }
-      var row = document.createElement('div');
-      row.className = 'health-cat-row';
-      row.innerHTML = '<span class="health-cat-label">' + cat.label + '</span>' +
-        '<span class="health-cat-right"><span class="health-cat-dots">' + dots + '</span>' +
-        '<span class="health-cat-pct">' + val + '%</span></span>';
-      cats.appendChild(row);
+      startOn("resize-right", "right");
+      startOn("resize-bottom", "bottom");
+      startOn("resize-corner", "corner");
+      window.addEventListener("pointermove", function (e) {
+        if (!mode) return;
+        // clientX/Y are relative to the iframe viewport == plugin content size.
+        // Only the dragged axis changes; the other keeps its current size.
+        var w = window.innerWidth, h = window.innerHeight;
+        if (mode === "right" || mode === "corner") w = Math.max(340, Math.ceil(e.clientX + 6));
+        if (mode === "bottom" || mode === "corner") h = Math.max(420, Math.ceil(e.clientY + 6));
+        post({ type: "resize", width: w, height: h });
+      });
+      window.addEventListener("pointerup", function () { mode = null; });
+    })();
+
+    function startPlan() {
+      var options = {
+        colors: $("opt-colors").checked, spacing: $("opt-spacing").checked,
+        radius: $("opt-radius").checked, effects: $("opt-effects").checked,
+        dimensions: $("opt-dimensions").checked, typography: $("opt-typography").checked,
+        layout: $("opt-layout").checked, misc: $("opt-misc").checked,
+      };
+      var autoApply = $("opt-auto").checked;
+      resetReviewUI();
+      uiState = "planning";
+      hide("idle-section");
+      hide("results");
+      hide("degraded-banner");
+      $("stepper").classList.remove("hidden");
+      show("progress-section");
+      var b = $("btn-primary");
+      b.disabled = true; b.textContent = autoApply ? "Working…" : "Planning…";
+      // Cancel only makes sense in the review flow; auto-apply has no abort point, so don't show a non-functional control.
+      $("btn-cancel").classList.toggle("hidden", autoApply);
+      post({ type: "run-plan", options: options, autoApply: autoApply });
     }
-  }
 
-  window.onmessage = function(event) {
-    var msg = event.data.pluginMessage;
-    if (!msg) return;
-
-    if (msg.type === 'progress') {
-      document.getElementById('progress').textContent = msg.text;
+    function startCommit() {
+      uiState = "applying";
+      var b = $("btn-primary");
+      b.disabled = true; b.textContent = "Applying…";
+      $("btn-cancel").classList.add("hidden");
+      show("progress-section");
+      post({ type: "commit" });
     }
 
-    if (msg.type === 'done') {
-      var runBtn = document.getElementById('btn-run');
-      runBtn.disabled = false;
-      runBtn.textContent = 'Rebind Selected Frame';
-      var r = msg.results;
-      var p = document.getElementById('progress');
-      p.className = 'progress done';
-      p.textContent = 'Complete!';
-      document.getElementById('results').style.display = 'block';
+    function resetToIdle() {
+      uiState = "idle";
+      show("idle-section");
+      hide("progress-section");
+      hide("diff-section");
+      hide("degraded-banner");
+      var b = $("btn-primary");
+      b.disabled = false; b.textContent = "Plan rebind";
+      $("btn-cancel").classList.add("hidden");
+    }
 
-      document.getElementById('s-src').textContent = r.sourceNodesScanned;
-      document.getElementById('s-cl').textContent = r.colorsLearned;
-      document.getElementById('s-fl').textContent = r.floatsLearned;
-      document.getElementById('s-tsl').textContent = r.textStylesLearned;
-      document.getElementById('s-el').textContent = r.effectsLearned;
-      document.getElementById('s-lfa').textContent = r.localFallbacksAdded;
-      document.getElementById('s-pu').textContent = r.primitivesUpgraded;
+    function resetReviewUI() {
+      tabCounts = { colors: 0, dimensions: 0, typography: 0, effects: 0, misc: 0 };
+      tabRendered = { colors: 0, dimensions: 0, typography: 0, effects: 0, misc: 0 };
+      tabBodies = {};
+      rowMap = {};
+      $("tabs").innerHTML = "";
+      $("tab-body").innerHTML = "";
+      $("unmapped-list").innerHTML = "";
+      hide("unmapped-section");
+      hide("diff-section");
+    }
 
-      document.getElementById('s-tgt').textContent = r.targetNodesScanned;
-      document.getElementById('s-fills').textContent = r.fillsRebound;
-      document.getElementById('s-strokes').textContent = r.strokesRebound;
-      document.getElementById('s-fuzzy').textContent = r.fuzzyMatches;
-      document.getElementById('s-spacing').textContent = r.spacingRebound;
-      document.getElementById('s-radius').textContent = r.radiusRebound;
-      document.getElementById('s-dims').textContent = r.dimensionsRebound;
-      document.getElementById('s-ggaps').textContent = r.gridGapsRebound;
-      document.getElementById('s-lgrids').textContent = r.layoutGridsRebound;
-      document.getElementById('s-effs').textContent = r.effectFieldsRebound;
-      document.getElementById('s-ts').textContent = r.textStylesRebound;
-      document.getElementById('s-tv').textContent = r.typoVarsRebound;
-      document.getElementById('s-fonts').textContent = r.fontsFixed;
-      document.getElementById('s-sw').textContent = r.strokeWeightRebound;
-      document.getElementById('s-op').textContent = r.opacityRebound;
-      document.getElementById('s-vis').textContent = r.visibilityRebound;
-      document.getElementById('s-chars').textContent = r.charactersRebound;
-      document.getElementById('s-cp').textContent = r.componentPropsRebound;
-
-      var us = document.getElementById('unmapped-section');
-      var ul = document.getElementById('unmapped-list');
-      ul.innerHTML = '';
-      if (r.unmatchedColors && r.unmatchedColors.length > 0) {
-        us.style.display = 'block';
-        for (var i = 0; i < r.unmatchedColors.length; i++) {
-          var c = r.unmatchedColors[i];
-          var div = document.createElement('div');
-          div.className = 'unmapped-item';
-          var swatch = document.createElement('div');
-          swatch.className = 'unmapped-swatch';
-          swatch.style.background = c.hex;
-          var hexLabel = document.createElement('span');
-          hexLabel.className = 'unmapped-hex';
-          hexLabel.textContent = c.hex;
-          var countLabel = document.createElement('span');
-          countLabel.className = 'unmapped-count';
-          countLabel.textContent = c.count + 'x';
-          div.appendChild(swatch);
-          div.appendChild(hexLabel);
-          div.appendChild(countLabel);
-          ul.appendChild(div);
-        }
+    // ── Stepper + progress ──
+    function setPhase(phase) {
+      var steps = document.querySelectorAll(".step");
+      for (var i = 0; i < steps.length; i++) {
+        var p = parseInt(steps[i].getAttribute("data-phase"), 10);
+        steps[i].classList.remove("active", "complete");
+        if (p < phase) steps[i].classList.add("complete");
+        else if (p === phase) steps[i].classList.add("active");
+      }
+    }
+    function setProgress(label, current, total) {
+      $("progress-label-text").textContent = label + "…";
+      var fill = $("progress-fill");
+      if (total && total > 0) {
+        fill.classList.remove("indeterminate");
+        var pct = Math.min(100, Math.round((current / total) * 100));
+        fill.style.width = pct + "%";
+        $("progress-count").textContent = current + " / " + total;
       } else {
-        us.style.display = 'none';
+        fill.classList.add("indeterminate");
+        fill.style.width = "";
+        $("progress-count").textContent = current > 0 ? String(current) : "";
+      }
+    }
+    function renderTally(t) {
+      if (!t) { hide("tally"); return; }
+      show("tally");
+      $("tally").innerHTML =
+        chip("colors", t.colors) + chip("values", t.values) +
+        chip("text styles", t.textStyles) + chip("effects", t.effects);
+    }
+    function chip(label, n) { return '<span class="tally-chip"><b>' + (n || 0) + '</b> ' + label + '</span>'; }
+
+    // ── Tabs + diff rows ──
+    function buildTabs() {
+      var tabsEl = $("tabs");
+      tabsEl.innerHTML = "";
+      var bodyEl = $("tab-body");
+      bodyEl.innerHTML = "";
+      for (var i = 0; i < TABS.length; i++) {
+        (function(tab) {
+          var t = document.createElement("div");
+          t.className = "tab" + (tab === activeTab ? " active" : "");
+          t.id = "tab-" + tab;
+          t.innerHTML = TAB_LABELS[tab] + '<span class="tab-count" id="tabcount-' + tab + '">0</span>';
+          t.onclick = function() { switchTab(tab); };
+          tabsEl.appendChild(t);
+
+          var body = document.createElement("div");
+          body.id = "tabbody-" + tab;
+          if (tab !== activeTab) body.classList.add("hidden");
+          var empty = document.createElement("div");
+          empty.className = "empty-tab";
+          empty.textContent = "Nothing to rebind here.";
+          empty.id = "empty-" + tab;
+          body.appendChild(empty);
+          bodyEl.appendChild(body);
+          tabBodies[tab] = body;
+        })(TABS[i]);
+      }
+    }
+    function switchTab(tab) {
+      activeTab = tab;
+      for (var i = 0; i < TABS.length; i++) {
+        var isActive = TABS[i] === tab;
+        var tabEl = $("tab-" + TABS[i]);
+        if (tabEl) tabEl.classList.toggle("active", isActive);
+        if (tabBodies[TABS[i]]) tabBodies[TABS[i]].classList.toggle("hidden", !isActive);
+      }
+    }
+    function updateTabCount(tab, n) {
+      var el = $("tabcount-" + tab);
+      if (el) el.textContent = String(n);
+    }
+
+    function rowSig(r) {
+      return r.tab + "|" + r.fromValue + "|" + r.toVariableName + "|" + r.provenance + "|" + r.confidence;
+    }
+
+    // Update an already-rendered row's token name, badge, and count in place — this is
+    // what lets a color row RESOLVE live (its token + Learned ×N settle) without ever
+    // creating a duplicate.
+    function refreshRowEl(el, r) {
+      var tEl = el.querySelector(".to .ellip");
+      if (tEl) { tEl.textContent = r.toVariableName; tEl.title = r.toVariableName; }
+      var toEl = el.querySelector(".to");
+      if (toEl) {
+        var oldBadge = toEl.querySelector(".badge");
+        if (oldBadge) toEl.removeChild(oldBadge);
+        toEl.appendChild(badgeFor(r));
+      }
+      var cEl = el.querySelector(".count");
+      if (cEl) cEl.textContent = "×" + r.count;
+    }
+
+    // Live upsert keyed by r.key (colors: "c:<hex>" so the row resolves in place as the
+    // majority-vote leader settles; everything else: full signature). Tab badges track
+    // the count delta so they stay accurate while streaming.
+    function upsertRows(rows) {
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var key = r.key || rowSig(r);
+        var rec = rowMap[key];
+        if (rec) {
+          var delta = r.count - rec.count;
+          rec.count = r.count;
+          if (rec.el) refreshRowEl(rec.el, r);
+          if (delta !== 0) { tabCounts[r.tab] += delta; updateTabCount(r.tab, tabCounts[r.tab]); }
+          continue;
+        }
+        // New row
+        tabCounts[r.tab] += r.count;
+        updateTabCount(r.tab, tabCounts[r.tab]);
+        var body = tabBodies[r.tab];
+        if (!body || tabRendered[r.tab] >= ROW_CAP) {
+          // Counted (badge stays accurate) but not rendered (no body yet, or cap reached).
+          rowMap[key] = { count: r.count, el: null };
+          continue;
+        }
+        var emptyEl = $("empty-" + r.tab);
+        if (emptyEl) emptyEl.classList.add("hidden");
+        var el = buildRow(r);
+        body.appendChild(el);
+        tabRendered[r.tab]++;
+        rowMap[key] = { count: r.count, el: el };
+        if (tabRendered[r.tab] === ROW_CAP) {
+          var more = document.createElement("div");
+          more.className = "more-footer";
+          more.textContent = "+ more not shown (all will be applied)";
+          body.appendChild(more);
+        }
+      }
+    }
+
+    function buildRow(r) {
+      var row = document.createElement("div");
+      row.className = "diff-row";
+
+      var from = document.createElement("div");
+      from.className = "from";
+      if (r.swatch) {
+        var sw = document.createElement("div");
+        sw.className = "swatch"; sw.style.background = r.swatch;
+        from.appendChild(sw);
+        var hx = document.createElement("span");
+        hx.className = "mono"; hx.textContent = r.fromValue;
+        from.appendChild(hx);
+      } else {
+        var chipEl = document.createElement("span");
+        chipEl.className = "field-chip ellip"; chipEl.textContent = r.fromValue;
+        from.appendChild(chipEl);
       }
 
-      // Update tier from done message
-      if (msg.tier) {
-        updateTierUI(msg.tier);
+      var arrow = document.createElement("span");
+      arrow.className = "arrow"; arrow.textContent = "→";
+
+      var to = document.createElement("div");
+      to.className = "to";
+      var tokenName = document.createElement("span");
+      tokenName.className = "ellip"; tokenName.textContent = r.toVariableName;
+      tokenName.title = r.toVariableName;
+      to.appendChild(tokenName);
+      to.appendChild(badgeFor(r));
+
+      var count = document.createElement("span");
+      count.className = "count"; count.textContent = "×" + r.count;
+
+      row.appendChild(from);
+      row.appendChild(arrow);
+      row.appendChild(to);
+      row.appendChild(count);
+      return row;
+    }
+
+    function badgeFor(r) {
+      var b = document.createElement("span");
+      b.className = "badge ";
+      if (r.confidence === "fuzzy") {
+        b.className += "fuzzy"; b.textContent = "Fuzzy ±" + (r.fuzzyDelta || 2);
+      } else if (r.provenance === "learned") {
+        b.className += "learned"; b.textContent = "Learned ×" + (r.seenCount || 1);
+      } else if (r.provenance === "upgraded") {
+        b.className += "upgraded"; b.textContent = "Semantic";
+      } else if (r.provenance === "fallback") {
+        b.className += "fallback"; b.textContent = "Fallback";
+      } else {
+        b.className += "exact"; b.textContent = "Exact";
+      }
+      return b;
+    }
+
+    function renderUnmatched(list) {
+      if (!list || list.length === 0) { hide("unmapped-section"); return; }
+      show("unmapped-section");
+      var ul = $("unmapped-list");
+      ul.innerHTML = "";
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var div = document.createElement("div");
+        div.className = "unmapped-item";
+        var swatch = document.createElement("div");
+        swatch.className = "swatch"; swatch.style.background = c.hex;
+        var hexLabel = document.createElement("span");
+        hexLabel.className = "mono"; hexLabel.textContent = c.hex;
+        var countLabel = document.createElement("span");
+        countLabel.className = "unmapped-count"; countLabel.textContent = c.count + "×";
+        div.appendChild(swatch); div.appendChild(hexLabel); div.appendChild(countLabel);
+        ul.appendChild(div);
+      }
+    }
+
+    // ── Tier UI ──
+    function updateTierUI(tier) {
+      currentUITier = tier;
+      var label = $("tier-label");
+      var upgrade = $("tier-upgrade");
+      if (tier === "team" || tier === "pro") {
+        label.textContent = tier === "team" ? "Team" : "Pro";
+        upgrade.style.display = "none";
+      } else {
+        label.textContent = "Free for everyone";
+        upgrade.style.display = "inline";
+      }
+    }
+
+    // ── Health score ──
+    function renderHealthScore(healthScore, categoryScores) {
+      var card = $("health-card");
+      if (typeof healthScore !== "number") { card.classList.add("hidden"); return; }
+      card.classList.remove("hidden");
+      $("health-score").textContent = healthScore + "%";
+      $("health-bar").style.width = healthScore + "%";
+      var cats = $("health-categories");
+      cats.innerHTML = "";
+      var categories = [
+        { label: "Colors", key: "colors" }, { label: "Layout", key: "layout" },
+        { label: "Typography", key: "typography" }, { label: "Effects", key: "effects" },
+      ];
+      for (var i = 0; i < categories.length; i++) {
+        var cat = categories[i];
+        var val = categoryScores && categoryScores[cat.key] ? categoryScores[cat.key] : 0;
+        var filled = Math.round(val / 20);
+        var dots = "";
+        for (var d = 0; d < 5; d++) dots += d < filled ? '<span class="filled">●</span>' : '<span class="empty">○</span>';
+        var row = document.createElement("div");
+        row.className = "health-cat-row";
+        row.innerHTML = '<span class="health-cat-label">' + cat.label + "</span>" +
+          '<span class="health-cat-right"><span class="health-cat-dots">' + dots + "</span>" +
+          '<span class="health-cat-pct">' + val + "%</span></span>";
+        cats.appendChild(row);
+      }
+    }
+
+    // ── Message handler ──
+    window.onmessage = function(event) {
+      var msg = event.data.pluginMessage;
+      if (!msg) return;
+
+      // Cooperative-yield ack: reply immediately so the plugin thread can resume
+      // after flushing its message queue (used only when the sandbox lacks setTimeout).
+      if (msg.type === "__yield") { post({ type: "__yield-ack" }); return; }
+
+      try {
+      if (msg.type === "tier") { updateTierUI(msg.tier); return; }
+
+      if (msg.type === "progress") {
+        if (typeof msg.phase === "number") setPhase(msg.phase);
+        setProgress(msg.label || "Working", msg.current || 0, msg.total || 0);
+        if (msg.tally) renderTally(msg.tally);
+        return;
       }
 
-      // Render health score card
+      if (msg.type === "plan-batch") {
+        // Ignore any rows that arrive after the user left the planning state (e.g. a
+        // late batch from a cancelled run) — never re-show the diff over an idle panel.
+        if (uiState !== "planning") return;
+        // Build the tabs/diff view on the first streamed batch (during planning).
+        if ($("tabs").children.length === 0) { buildTabs(); show("diff-section"); }
+        upsertRows(msg.rows || []);
+        return;
+      }
+
+      if (msg.type === "plan-complete") {
+        setPhase(4);
+        // ensure tabs exist even if zero rows
+        if ($("tabs").children.length === 0) { buildTabs(); show("diff-section"); }
+        if (msg.byTab) {
+          for (var t in msg.byTab) { tabCounts[t] = msg.byTab[t]; updateTabCount(t, msg.byTab[t]); }
+        }
+        renderUnmatched(msg.unmatched);
+        if (typeof msg.learnedRatio === "number" && msg.learnedRatio < 0.5 && msg.total > 0) {
+          show("degraded-banner");
+        }
+        hide("progress-section");
+        renderTally(null);
+        uiState = "review";
+        var b = $("btn-primary");
+        b.disabled = false;
+        b.textContent = msg.total > 0 ? ("Apply " + msg.total) : "Nothing to apply";
+        b.disabled = msg.total === 0;
+        return;
+      }
+
+      if (msg.type === "done") {
+        uiState = "done";
+        renderResults(msg);
+        hide("progress-section");
+        hide("diff-section");
+        show("results");
+        var b = $("btn-primary");
+        b.disabled = false; b.textContent = "Plan again";
+        $("btn-cancel").classList.add("hidden");
+        return;
+      }
+
+      if (msg.type === "upsell") {
+        show("degraded-banner");
+        $("degraded-banner").textContent = msg.text;
+        return;
+      }
+
+      if (msg.type === "export-data") {
+        var blob = new Blob([msg.json], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url; a.download = msg.filename || "token-rebinder-mapping.json";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      if (msg.type === "error") {
+        // Recover to a usable idle state and surface the error WITHOUT overlapping panels.
+        resetToIdle();
+        var eb = $("degraded-banner");
+        eb.classList.remove("hidden");
+        eb.textContent = msg.text;
+        return;
+      }
+      } catch (uiErr) {
+        // A UI exception must never silently wedge the panel: recover to idle + show it.
+        try { resetToIdle(); } catch (_e) {}
+        var dbg = $("degraded-banner");
+        if (dbg) { dbg.classList.remove("hidden"); dbg.textContent = "UI error: " + (uiErr && uiErr.message ? uiErr.message : String(uiErr)); }
+      }
+    };
+
+    function renderResults(msg) {
+      var r = msg.results;
+      var banner = $("result-banner");
+      // Honest reporting, distinguishing causes:
+      //  - selectionChanged  → a genuine "frame changed during review" (warn)
+      //  - skippedFromPlan    → fields inapplicable to their layer type (informational, expected)
+      //  - skippedNodes       → subtrees that errored out (warn — result is partial)
+      if (msg.selectionChanged) {
+        banner.className = "result-banner warn";
+        banner.textContent = "Applied " + msg.applied + " bindings. Part of the planned selection changed during review — re-run to cover the rest.";
+      } else if (msg.skippedNodes && msg.skippedNodes > 0) {
+        // Genuine node-level skip: a subtree errored, so the result is partial.
+        banner.className = "result-banner warn";
+        banner.textContent = "Applied " + msg.applied + " bindings, but " + msg.skippedNodes + " node(s) could not be processed and were skipped.";
+      } else if (msg.skippedFromPlan && msg.skippedFromPlan > 0) {
+        banner.className = "result-banner ok";
+        banner.textContent = "Applied " + msg.applied + " of " + msg.planned +
+          " proposed bindings (" + msg.skippedFromPlan + " fields weren't applicable to their layers).";
+      } else {
+        banner.className = "result-banner ok";
+        banner.textContent = "Applied " + (msg.applied != null ? msg.applied : "all") + " bindings across " + r.targetNodesScanned + " nodes.";
+      }
+      // Paint-level note (informational, not a node skip): one or more paints referenced a missing variable.
+      if (msg.skippedPaints && msg.skippedPaints > 0) {
+        banner.textContent += " " + msg.skippedPaints + " color(s) referenced a missing variable and were left unbound.";
+      }
+
+      $("s-tgt").textContent = r.targetNodesScanned;
+      $("s-fills").textContent = r.fillsRebound;
+      $("s-strokes").textContent = r.strokesRebound;
+      $("s-fuzzy").textContent = r.fuzzyMatches;
+      $("s-spacing").textContent = r.spacingRebound;
+      $("s-radius").textContent = r.radiusRebound;
+      $("s-dims").textContent = r.dimensionsRebound;
+      $("s-ggaps").textContent = r.gridGapsRebound;
+      $("s-lgrids").textContent = r.layoutGridsRebound;
+      $("s-effs").textContent = r.effectFieldsRebound;
+      $("s-ts").textContent = r.textStylesRebound;
+      $("s-tv").textContent = r.typoVarsRebound;
+      $("s-fonts").textContent = r.fontsFixed;
+      $("s-sw").textContent = r.strokeWeightRebound;
+      $("s-op").textContent = r.opacityRebound;
+      $("s-vis").textContent = r.visibilityRebound;
+      $("s-chars").textContent = r.charactersRebound;
+      $("s-cp").textContent = r.componentPropsRebound;
+
       renderHealthScore(msg.healthScore, msg.categoryScores);
-
-      // Hide upsell when a run completes
-      document.getElementById('upsell-section').style.display = 'none';
+      renderUnmatched(r.unmatchedColors);
     }
-
-    if (msg.type === 'tier') {
-      updateTierUI(msg.tier);
-    }
-
-    if (msg.type === 'upsell') {
-      var upsellSection = document.getElementById('upsell-section');
-      document.getElementById('upsell-text').textContent = msg.text;
-      upsellSection.style.display = 'block';
-    }
-
-    if (msg.type === 'export-data') {
-      var blob = new Blob([msg.json], { type: 'application/json' });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'token-rebinder-mapping.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    if (msg.type === 'error') {
-      var runBtn = document.getElementById('btn-run');
-      runBtn.disabled = false;
-      runBtn.textContent = 'Rebind Selected Frame';
-      var ep = document.getElementById('progress');
-      ep.className = 'progress error';
-      ep.textContent = msg.text;
-    }
-  };
-</script>
+  </script>
 </body>
 </html>
